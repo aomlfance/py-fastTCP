@@ -7,7 +7,7 @@ from .exceptions import ExitSignal
 
 B = TypeVar("B", bound=pydantic.BaseModel)
 
-class AomSocket:
+class Socket:
     """封装r, w提供api功能"""
     def __init__(self, orig_stream_reader: asyncio.StreamReader, orig_stream_writer: asyncio.StreamWriter):
         self.stream_reader = orig_stream_reader
@@ -43,7 +43,7 @@ class AomSocket:
         body = b""
 
         while residual_size > 0:
-            chunk = await self.stream_reader.read(residual_size)
+            chunk = await self.get_chunk(residual_size)
             body += chunk
             residual_size -= len(chunk)
 
@@ -101,7 +101,7 @@ class AomSocket:
             if self.stream_writer and not self.stream_writer.is_closing():
                 self.stream_writer.close()
                 await self.stream_writer.wait_closed()
-        except ConnectionResetError:
+        except (ConnectionResetError, BrokenPipeError):
             pass
-        except BrokenPipeError as e:
+        except Exception as e:
             print(f"关闭连接时发生未知错误: {e}")

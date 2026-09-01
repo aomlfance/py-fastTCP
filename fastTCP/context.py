@@ -1,11 +1,11 @@
-from .socket import AomSocket
+from .socket import Socket
 from .payload import RequestPayload
 from typing import Any
 
 class Context:
     def __init__(
             self,
-            aom_socket: AomSocket,
+            aom_socket: Socket,
             payload: RequestPayload
     ):
         self.aom_socket = aom_socket

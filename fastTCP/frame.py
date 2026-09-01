@@ -1,76 +1,36 @@
-import asyncio
-from types import UnionType, NoneType
-from typing import get_args, get_origin, Union, Literal, Any
-from .socket import AomSocket
+from .socket import Socket
 from .exceptions import ExitSignal, Abort
-from .payload import RequestPayload
-from .response import make_response, abort
+from .payload import RequestPayload, ResponsePayload
+from .response import default_response, make_response
 from .context import Context
+from .injection import injection
 import inspect
+import asyncio
 import logging
-from .route import Blueprint, Route, name
+from .route import Blueprint, Route
 
 logger = logging.getLogger(__name__)
 
-def short_name(obj: Any):
-    return str(obj) if len(str(obj)) < 12 else str(obj)[:12]
-
-async def run_with_error(func, *args, **kwargs):
+async def run_route(route: Route, ctx:Context):
     """区分异步同步运行"""
     try:
-        if inspect.iscoroutinefunction(func):
-            return await func(*args, **kwargs)
+        try:
+            injection_kwargs = injection(ctx, route)
+        except TypeError as e:
+            logger.error(f"{type(e)} - {e}")
+            return default_response(500)
+
+        if inspect.iscoroutinefunction(route.handler):
+            return await route.handler(ctx, **injection_kwargs)
         else:
-            return func(*args, **kwargs)
+            return route.handler(ctx, **injection_kwargs)
     except Abort as e:
         return e.response
     except ExitSignal:
         raise
     except Exception as e:
-        logger.error(f"{e}")
-        try:
-            abort(500)
-        except Abort as e:
-            return e.response
-
-def injection(ctx: Context, route: Route):
-    """
-    根据路由函数的签名, 选择要注入的参数
-    :raise TypeError
-    """
-    kwargs = {}
-
-    for index, param in enumerate(route.handler_sig.parameters.values()):
-        # 跳过第一位上下文
-        if index == 0:
-            continue
-
-        if param.name in ctx.store:
-            value = ctx[param.name]
-            origin = get_origin(param.annotation)
-
-            # 检查是否与类型提示一致
-            if (
-                origin is None and param.annotation != param.empty
-                and not isinstance(param.annotation, type(value))
-            ):
-                raise TypeError(f"{param.name} 要求的{param.annotation}与{short_name(value)}的{type(value)}不符合", 500)
-            elif origin is Literal and value not in get_args(param.annotation):
-                raise TypeError(f"{short_name(value)} 与 {param.name}期待的{get_args(param.annotation)}不同")
-            else:
-                logger.debug(f"{param.annotation} 暂时不支持的类型提示")
-        # 优先取默认值
-        elif param.default != param.empty:
-            value = param.default
-        # 否则是否允许NoneType
-        elif get_origin(param.annotation) in (UnionType, Union) and NoneType in get_args(param.annotation):
-            value = None
-        else:
-            raise TypeError(f"{name(route.handler)} 缺少参数{param.name}")
-
-        kwargs[param.name] = value
-
-    return kwargs
+        logger.error(f"{type(e)} - {e}")
+        return default_response(500)
 
 class FastTCP(Blueprint):
     host: str = "127.0.0.1"
@@ -82,7 +42,7 @@ class FastTCP(Blueprint):
         self.clients = {}
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        aom_socket = AomSocket(reader, writer)
+        aom_socket = Socket(reader, writer)
 
         logger.info(f"客户端接入 - {aom_socket.address}")
 
@@ -96,37 +56,41 @@ class FastTCP(Blueprint):
         finally:
             await aom_socket.close()
 
-    async def main_handler(self, aom_socket: AomSocket):
+    async def main_handler(self, aom_socket: Socket):
         request_payload = await aom_socket.get_payload(RequestPayload)
 
         context = Context(aom_socket, request_payload)
         chain = self.get_chain(request_payload.cmd)
 
-        for route in [*chain.before, chain.main_route]:
-            try:
-                kwargs = injection(context, route)
-            except TypeError as e:
-                logger.error(f"{e}")
-                try:
-                    abort(500)
-                except Abort as e:
-                    res = e.response
-            else:
-                res = await run_with_error(route.handler, context, **kwargs)
+       # 这里留下一个trea_down预留代码
+        for before_route in chain.before:
+            res = await run_route(before_route, context)
 
-            if res is not None:
+            if res: break
+        else:
+            res = await run_route(chain.main_route, context)
+
+            if not res:
+                logger.warning(f"{request_payload.cmd}主路由没有返回响应")
+                res = default_response(204)
+
+        res = make_response(res)
+
+        for after_route in chain.after:
+            res = await run_route(after_route, context)
+
+            if not isinstance(res, ResponsePayload):
+                logger.warning("after 路由应该也返回 ResponsePayload")
+                res = default_response(500)
                 break
 
-        for route in chain.after:
-            res = await run_with_error(route.handler, context)
-
-        if res is None:
-            res = "", 204
-
-        res_payload = make_response(res)
-        await context.aom_socket.send_payload(res_payload)
+        await aom_socket.send_payload(res)
 
     async def start(self):
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(lineno)d - %(levelname)s - %(message)s"
+        )
         server = await self.server
 
         async with server:
