@@ -1,13 +1,14 @@
 from .socket import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
-from .response import default_response, make_response
+from .response import default_response, make_response, abort_code
 from .context import Context
 from .injection import injection
 import inspect
 import asyncio
 import logging
 from .route import Blueprint, Route
+import contextlib
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,23 @@ async def run_route(route: Route, ctx:Context):
 
         if inspect.iscoroutinefunction(route.handler):
             return await route.handler(ctx, **injection_kwargs)
+        elif inspect.isgeneratorfunction(route.handler):
+            times = 0
+            gen = route.handler(ctx, **injection_kwargs)
+            with contextlib.closing(gen):
+                for res in gen:
+                    if times >= 100:
+                        logger.warning("对话太多次了!!!")
+                        return default_response(408)
+                    if (res_payload := make_response(res)).status_code != 100:
+                        break
+                    else:
+                        await ctx.aom_socket.send_payload(res_payload)
+                    times += 1
+                else:
+                    logger.error(f"生成器路由结束时应该以非100响应结束, 或未返回响应")
+                    return None
+                return res_payload
         else:
             return route.handler(ctx, **injection_kwargs)
     except Abort as e:
