@@ -1,3 +1,5 @@
+import pydantic
+
 from .socket import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
@@ -20,12 +22,14 @@ async def run_route(route: Route, ctx:Context):
         except TypeError as e:
             logger.error(f"{type(e)} - {e}")
             return default_response(500)
+        except pydantic.ValidationError as e:
+            return default_response(400)
 
         if inspect.iscoroutinefunction(route.handler):
-            return await route.handler(ctx, **injection_kwargs)
+            return await route.handler(**injection_kwargs)
         elif inspect.isgeneratorfunction(route.handler):
             times = 0
-            gen = route.handler(ctx, **injection_kwargs)
+            gen = route.handler(**injection_kwargs)
             # 这里想要达成的效果是区分yield, return
             with contextlib.closing(gen):
                 while True:
@@ -45,11 +49,11 @@ async def run_route(route: Route, ctx:Context):
                             logger.warning("yield应该返回明确的值!")
                             res = default_response(100)
 
-                        await ctx.aom_socket.send_payload(make_response(res))
+                        await ctx.socket.send_payload(make_response(res, 100))
                     finally:
                         times += 1
         else:
-            return route.handler(ctx, **injection_kwargs)
+            return route.handler(**injection_kwargs)
     except Abort as e:
         return e.response
     except ExitSignal:
@@ -69,6 +73,7 @@ class FastTCP(Blueprint):
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         aom_socket = Socket(reader, writer)
+        self.clients[aom_socket.address] = aom_socket
 
         logger.info(f"客户端接入 - {aom_socket.address}")
 
@@ -81,6 +86,7 @@ class FastTCP(Blueprint):
             logger.info(f"客户端退出 - {e}")
         finally:
             await aom_socket.close()
+            self.clients.pop(aom_socket.address, None)
 
     async def main_handler(self, aom_socket: Socket):
         request_payload = await aom_socket.get_payload(RequestPayload)

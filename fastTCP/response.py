@@ -7,10 +7,11 @@ from .http_status import HTTP_STATUS
 from .exceptions import Abort
 import logging
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 
 def make_response(
         res: tuple[Any, int] | ResponsePayload | tuple[Any] | Any,
+        default_status_code: int = 200,
 ):
     """
     用来将路由函数传来的值转为ResponsePayload
@@ -24,7 +25,7 @@ def make_response(
         raise TypeError("参数错误 应该有返回值")
 
     body = res[0] if isinstance(res[0], dict) else {"data": res[0]}
-    status_code = res[1] if len(res) > 1 else 200
+    status_code = res[1] if len(res) > 1 else default_status_code
 
     return ResponsePayload(status_code=status_code, body=body)
 

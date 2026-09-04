@@ -62,7 +62,11 @@ class RoutesManager:
         if cmd not in self.routes:
             return Chain([], unknown_cmd_route, [])
 
-        return Chain(self.before_routes.get(cmd, []), self.routes[cmd], self.after_routes.get(cmd, []))
+        return Chain(
+            [*self.all_before, *self.before_routes.get(cmd, [])],
+            self.routes[cmd],
+            [*self.after_routes.get(cmd, []), *self.all_after],
+        )
 
     def __getitem__(self, item):
         ...

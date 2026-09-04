@@ -8,7 +8,7 @@ class Context:
             aom_socket: Socket,
             payload: RequestPayload
     ):
-        self.aom_socket = aom_socket
+        self.socket = aom_socket
         self.payload = payload
         self.store: dict[str, Any] = {}
 
@@ -45,7 +45,7 @@ class Context:
     def get(self, key: str) -> Any | None:
         return self.store.get(key)
 
-    __getitem__ = get
+    __getitem__ = lambda s, k: s.store[k]
 
     def __contains__(self, item):
         return item in self.store

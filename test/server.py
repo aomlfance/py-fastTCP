@@ -1,17 +1,18 @@
 from fastTCP import FastTCP, Context, abort_code
 import asyncio
+from pydantic import BaseModel
 
 app = FastTCP()
 
-@app.before(["hey", "hello"])
-def get_name(ctx: Context):
-    if "name" not in ctx.payload.body:
-        abort_code(400)
+class User(BaseModel):
+    name: str
 
-    ctx["name"] = ctx.payload.body["name"]
+@app.before(["hey", "hello"])
+def get_name(ctx: Context, user: User):
+    ctx["name"] = user.name
 
 @app.route("hey")
-def hey(ctx: Context, name: str):
+def hey(name: str):
     return "hey " + name
 
 asyncio.run(app.start())

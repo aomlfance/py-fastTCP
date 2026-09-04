@@ -1,7 +1,10 @@
+import pydantic
+
 from .context import Context
 from .route import Route
-from typing import get_origin, get_args, Literal, Union
+from typing import get_origin, get_args, Literal, Union, Iterable
 from types import NoneType, UnionType
+from .socket import Socket
 from .utils import short_name, name
 import logging
 
@@ -10,30 +13,29 @@ logger = logging.getLogger(__name__)
 def injection(ctx: Context, route: Route):
     """
     根据路由函数的签名, 选择要注入的参数
-    :raise TypeError
+    :raise TypeError, pydantic.ValidationError:
     """
     kwargs = {}
 
     for index, param in enumerate(route.handler_sig.parameters.values()):
-        # 跳过第一位上下文
-        if index == 0:
+        # Socket, Context的优先级最高, 不允许注入
+        if param.annotation in (Socket, Context):
+            if param.annotation == Socket:
+                kwargs[param.name] = ctx.socket
+            else:
+                kwargs[param.name] = ctx
             continue
 
+        # 注入
         if param.name in ctx.store:
             value = ctx[param.name]
-            origin = get_origin(param.annotation)
-
-            # 检查是否与类型提示一致
-            if (
-                origin is None and param.annotation != param.empty
-                and not issubclass(type(value), param.annotation)
-            ):
-                raise TypeError(f"{param.name} 要求的{param.annotation}与{short_name(value)}的{type(value)}不符合", 500)
-            elif origin is Literal and value not in get_args(param.annotation):
-                raise TypeError(f"{short_name(value)} 与 {param.name}期待的{get_args(param.annotation)}不同")
-            else:
-                logger.debug(f"{param.annotation} 暂时不支持的类型提示")
-        # 优先取默认值
+        # 绑定
+        elif isinstance(param.annotation, type) and issubclass(param.annotation, pydantic.BaseModel):
+            try:
+                value = param.annotation(**ctx.payload.body)
+            except pydantic.ValidationError:
+                raise
+        # 否则优先取默认值
         elif param.default != param.empty:
             value = param.default
         # 否则是否允许NoneType
