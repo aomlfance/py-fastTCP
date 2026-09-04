@@ -1,7 +1,7 @@
 from .socket import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
-from .response import default_response, make_response, abort_code
+from .response import default_response, make_response
 from .context import Context
 from .injection import injection
 import inspect
@@ -26,20 +26,28 @@ async def run_route(route: Route, ctx:Context):
         elif inspect.isgeneratorfunction(route.handler):
             times = 0
             gen = route.handler(ctx, **injection_kwargs)
+            # 这里想要达成的效果是区分yield, return
             with contextlib.closing(gen):
-                for res in gen:
-                    if times >= 100:
-                        logger.warning("对话太多次了!!!")
+                while True:
+                    if times >= 128:
+                        logger.error("已经迭代了太多次了")
                         return default_response(408)
-                    if (res_payload := make_response(res)).status_code != 100:
-                        break
+                    try:
+                        res = next(gen)
+                    except StopIteration as e:
+                        if e.value is None:
+                            logger.error("根据生成器路由规范, 要明确结束对话应该使用return而不是自然耗尽.")
+                            return None
+
+                        return e.value
                     else:
-                        await ctx.aom_socket.send_payload(res_payload)
-                    times += 1
-                else:
-                    logger.error(f"生成器路由结束时应该以非100响应结束, 或未返回响应")
-                    return None
-                return res_payload
+                        if res is None:
+                            logger.warning("yield应该返回明确的值!")
+                            res = default_response(100)
+
+                        await ctx.aom_socket.send_payload(make_response(res))
+                    finally:
+                        times += 1
         else:
             return route.handler(ctx, **injection_kwargs)
     except Abort as e:
@@ -88,7 +96,7 @@ class FastTCP(Blueprint):
         else:
             res = await run_route(chain.main_route, context)
 
-            if not res:
+            if res is None:
                 logger.warning(f"{request_payload.cmd}主路由没有返回响应")
                 res = default_response(204)
 
