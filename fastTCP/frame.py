@@ -93,6 +93,7 @@ class FastTCP(Blueprint):
 
         context = Context(aom_socket, request_payload)
         chain = self.get_chain(request_payload.cmd)
+        context.store.update(chain.param)
 
        # 这里留下一个trea_down预留代码
         for before_route in chain.before:

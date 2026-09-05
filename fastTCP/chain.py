@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .route import Route
@@ -9,7 +9,9 @@ class Chain:
             before: list["Route"],
             main_route: "Route",
             after: list["Route"],
+            param: dict[str, Any] | None = None
     ):
         self.before = before
         self.main_route = main_route
         self.after = after
+        self.param = param or {}
