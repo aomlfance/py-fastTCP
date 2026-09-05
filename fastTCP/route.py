@@ -26,7 +26,6 @@ def unknown_cmd():
     return "unknown_cmd", 404
 
 unknown_cmd_route = Route("404", unknown_cmd, RouteTypes.ROUTE)
-
 angle_bracket_pat = compile("<(.*?)>")
 
 # 通配规则
@@ -42,7 +41,7 @@ TYPE_MAP = {
 }
 
 def is_match_cmd(cmd: str) -> bool:
-    return angle_bracket_pat.match(cmd) is not None or "*" in cmd
+    return "<" in cmd or "*" in cmd
 
 def to_pat(cmd: str) -> Pattern[Any]:
     if cmd == "*":
@@ -85,7 +84,7 @@ class RoutesManager:
             obj = self.dynamic_chains if can_match else self.chains
             cmd = to_pat(cmd) if can_match else cmd
 
-            if cmd not in self.chains:
+            if cmd not in obj:
                 chain = Chain([], unknown_cmd_route, [])
                 obj[cmd] = chain
             else:
