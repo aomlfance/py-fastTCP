@@ -1,5 +1,4 @@
 import pydantic
-
 from .socket_ import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
@@ -63,10 +62,9 @@ async def run_route(route: Route, ctx:Context):
         return default_response(500)
 
 class FastTCP(Blueprint):
-    host: str = "127.0.0.1"
-    port: int = 8964
-
-    def __init__(self):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8080):
+        self.host = host
+        self.port = port
         super().__init__()
         self.server = asyncio.start_server(self.handle_client, self.host, self.port)
         self.clients = {}
@@ -95,29 +93,34 @@ class FastTCP(Blueprint):
         chain = self.get_chain(request_payload.cmd)
         context.store.update(chain.param)
 
-       # 这里留下一个trea_down预留代码
-        for before_route in chain.before:
-            res = await run_route(before_route, context)
+        try:
+            for before_route in chain.before:
+                res = await run_route(before_route, context)
 
-            if res: break
+                if res: break
+            else:
+                res = await run_route(chain.main_route, context)
+
+                if res is None:
+                    logger.warning(f"{request_payload.cmd}主路由没有返回响应")
+                    res = default_response(204)
+
+            res = make_response(res)
+
+            for after_route in chain.after:
+                res = await run_route(after_route, context)
+
+                if not isinstance(res, ResponsePayload):
+                    logger.warning("after 路由应该也返回 ResponsePayload")
+                    res = default_response(500)
+                    break
+
+            await aom_socket.send_payload(res)
+        except:
+            raise
         else:
-            res = await run_route(chain.main_route, context)
+            logger.info(f"{request_payload.cmd} - {res.status_code}")
 
-            if res is None:
-                logger.warning(f"{request_payload.cmd}主路由没有返回响应")
-                res = default_response(204)
-
-        res = make_response(res)
-
-        for after_route in chain.after:
-            res = await run_route(after_route, context)
-
-            if not isinstance(res, ResponsePayload):
-                logger.warning("after 路由应该也返回 ResponsePayload")
-                res = default_response(500)
-                break
-
-        await aom_socket.send_payload(res)
 
     async def start(self):
         logging.basicConfig(
