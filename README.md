@@ -1,33 +1,223 @@
 # fastTCP
 
-> 一个风格类似fastapi, flask的python TCP框架
+> 一个风格类似 FastAPI / Flask 的 Python TCP 框架
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue)]()
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
 
-异步, 简单, 类flask, fastapi代码风格.使写socket在写flask, fastapi般简洁.
+异步、简洁、类 Flask/FastAPI 代码风格，让写 TCP 像写 Web 框架一样简单。
 
+## 特性
 
-## 事先
+- **装饰器路由** — `@app.route("cmd")` 注册路由，和 Flask 一样直观
+- **通配符路由** — `<int:id>`、`<str:name>`、`*` 全局匹配
+- **中间件链** — `before` / `after` 分别在路由前后执行
+- **依赖注入** — 根据函数签名自动注入参数
+- **生成器对话** — 用 `yield` 实现多轮交互式对话
+- **蓝图** — 支持模块化拆分路由
 
-**fastTCP 可能不是您的最佳选择.**  
-在此之前, 就有了
-[Veltix](https://github.com/NytroxDev/Veltix), 
-[Twisted](https://github.com/twisted/twisted) 
-等成熟的python-TCP框架.  
-当然, 如果你想要主流web框架的中间件链, 与更简洁简单的代码.  
-你也可以选择fastTCP.
+## 安装
+
+```bash
+git clone https://github.com/aomlfance/py-fastTCP.git
+cd py-fastTCP
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+```
 
 ## 快速上手
 
+### 服务端
+
 ```python
-from fastTCP import FastTCP
+from fastTCP import FastTCP, Context
 import asyncio
 
-app = FastTCP()
+app = FastTCP(host="127.0.0.1", port=8964)
 
-@app.route("hey") # or ["hey", "hi", "hello"]
-def say_hello():
-    return "hello"
+@app.route("hey")
+def hey(name: str):
+    return f"hey {name}"
 
 asyncio.run(app.start())
 ```
+
+### 客户端
+
+```python
+import socket
+import json
+import struct
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.connect(("127.0.0.1", 8964))
+
+def send(cmd: str, body: dict = None):
+    payload = json.dumps({"cmd": cmd, "body": body or {}}).encode()
+    sock.sendall(struct.pack("!I", len(payload)) + payload)
+
+def recv() -> dict:
+    size = struct.unpack("!I", sock.recv(4))[0]
+    return json.loads(sock.recv(size))
+
+send("hey", {"name": "World"})
+print(recv())
+# {'status_code': 200, 'body': {'data': 'hey World'}}
+
+sock.close()
+```
+
+## 路由
+
+### 基本路由
+
+```python
+@app.route("hello")
+def hello():
+    return "hello"
+
+@app.route(["hey", "hi", "hello"])
+def greet():
+    return "hi"
+```
+
+### 通配符路由
+
+```python
+@app.route("user.<int:id>")
+def get_user(id: int):
+    return f"user {id}"
+
+@app.route("file.<path:name>")
+def get_file(name: str):
+    return f"file {name}"
+```
+
+支持的类型：`int`、`str`（默认）、`uuid`
+
+### 返回值
+
+```python
+# 字符串 → 自动包装为 {"data": "hello"}
+@app.route("str")
+def str_resp():
+    return "hello"
+
+# 字典 → 直接作为 body
+@app.route("dict")
+def dict_resp():
+    return {"key": "value"}
+
+# 元组 → (body, status_code)
+@app.route("created")
+def tuple_resp():
+    return "created", 201
+```
+
+## 中间件
+
+### before — 路由前执行
+
+```python
+@app.before("hey")
+def check_auth(ctx: Context):
+    if "token" not in ctx.payload.body:
+        abort_code(401)
+    ctx["user"] = verify_token(ctx.payload.body["token"])
+```
+
+`before` 路由返回值会**短路**后续执行（main 路由不会跑）。
+
+### after — 路由后执行
+
+```python
+@app.after("hey")
+def log_response(ctx: Context):
+    print(f"请求完成: {ctx.payload.cmd}")
+    return {"logged": True}  # 必须返回 ResponsePayload
+```
+
+### 全局中间件
+
+```python
+@app.before("*")
+def global_before(ctx: Context):
+    ctx["start_time"] = time.time()
+
+@app.after("*")
+def global_after(ctx: Context):
+    print(f"耗时: {time.time() - ctx['start_time']}s")
+```
+
+## 依赖注入
+
+框架根据函数签名自动注入参数：
+
+```python
+# Context — 自动注入上下文
+@app.route("test")
+def test(ctx: Context):
+    return ctx.payload.cmd
+
+# pydantic 模型 — 自动从 body 绑定
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+@app.route("register")
+def register(user: User):
+    return f"{user.name}, {user.age}岁"
+
+# 字符串/数字 — 从 store 中按名注入
+@app.before("greet")
+def set_name(ctx: Context):
+    ctx["name"] = ctx.payload.body.get("name", "guest")
+
+@app.route("greet")
+def greet(name: str):
+    return f"hello {name}"
+```
+
+## 生成器对话
+
+用 `yield` 发送多条消息，`return` 结束对话：
+
+```python
+@app.route("dialog")
+def dialog(ctx: Context):
+    yield {"msg": "请输入你的名字"}
+    name = ctx.socket.get_str_msg()  # 等待客户端回复
+    yield {"msg": f"你好 {name}"}
+    return {"msg": "对话结束"}
+```
+
+客户端收到 `status_code: 100` 表示对话继续，`200` 表示结束。
+
+## 错误处理
+
+```python
+from fastTCP.response import abort_code, abort_args
+
+@app.route("forbidden")
+def forbidden():
+    abort_code(403)
+
+@app.route("error")
+def error():
+    abort_args("参数错误", 422)
+```
+
+## 协议格式
+
+```
+请求: {"cmd": "路由名", "body": {任意数据}}
+响应: {"status_code": 状态码, "body": {响应数据}}
+```
+
+状态码复用 HTTP 状态码体系（200 成功、404 未找到、500 服务器错误等）。
+
+## License
+
+MIT
