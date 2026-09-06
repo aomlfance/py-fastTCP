@@ -4,7 +4,7 @@ from .context import Context
 from .route import Route
 from typing import get_origin, get_args, Literal, Union, Iterable
 from types import NoneType, UnionType
-from .socket import Socket
+from .socket_ import Socket
 from .utils import short_name, name
 import logging
 

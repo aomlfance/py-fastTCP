@@ -55,11 +55,11 @@ def to_pat(cmd: str) -> Pattern[Any]:
             end = cmd.index(">", i)
             inner = cmd[i+1:end]
             if ":" in inner:
-                type_, name = inner.split(":", 1)
+                type_, name_ = inner.split(":", 1)
             else:
-                type_, name = "str", inner
+                type_, name_ = "str", inner
             regex = TYPE_MAP.get(type_, TYPE_MAP["str"])
-            parts.append(f"(?P<{name}>{regex})")
+            parts.append(f"(?P<{name_}>{regex})")
             i = end + 1
         else:
             parts.append(escape(cmd[i]))
@@ -83,6 +83,16 @@ class RoutesManager:
 
             obj = self.dynamic_chains if can_match else self.chains
             cmd = to_pat(cmd) if can_match else cmd
+
+            if can_match and route.type != RouteTypes.ROUTE:
+                obj = self.dynamic_before if route.type == RouteTypes.BEFORE_ROUTE else self.dynamic_after
+
+                if cmd not in obj:
+                    obj[cmd] = [route]
+                else:
+                    obj[cmd].append(route)
+
+                return
 
             if cmd not in obj:
                 chain = Chain([], unknown_cmd_route, [])

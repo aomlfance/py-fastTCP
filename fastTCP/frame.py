@@ -1,6 +1,6 @@
 import pydantic
 
-from .socket import Socket
+from .socket_ import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
 from .response import default_response, make_response

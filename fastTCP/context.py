@@ -1,4 +1,4 @@
-from .socket import Socket
+from .socket_ import Socket
 from .payload import RequestPayload
 from typing import Any
 

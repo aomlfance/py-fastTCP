@@ -7,7 +7,7 @@ app = FastTCP()
 class User(BaseModel):
     name: str
 
-@app.before(["hey", "hello"])
+@app.before("*")
 def get_name(ctx: Context, user: User):
     ctx["name"] = user.name
 
