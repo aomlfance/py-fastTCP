@@ -1,8 +1,12 @@
 from .socket_ import Socket
 from .payload import RequestPayload
 from typing import Any
+from warnings import warn
 
 class Context:
+
+    default_endure = 256
+
     def __init__(
             self,
             aom_socket: Socket,
@@ -11,6 +15,19 @@ class Context:
         self.socket = aom_socket
         self.payload = payload
         self.store: dict[str, Any] = {}
+        self._endure = self.default_endure
+
+    @property
+    def endure(self):
+        return self._endure
+
+    @endure.setter
+    def endure(self, value: int):
+        if not isinstance(value, int):
+            raise TypeError("endure must be an integer")
+        if value > 512:
+            warn("endure 有点多大了")
+        self._endure = value
 
     def set(self, key: str, value: Any):
         """
@@ -45,7 +62,8 @@ class Context:
     def get(self, key: str) -> Any | None:
         return self.store.get(key)
 
-    __getitem__ = lambda s, k: s.store[k]
+    def __getitem__(self, item: str):
+        return self.store[item]
 
     def __contains__(self, item):
         return item in self.store

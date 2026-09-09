@@ -4,12 +4,21 @@ import struct
 import pydantic
 from typing import TypeVar, Any
 from .exceptions import ExitSignal
+import io
 
 B = TypeVar("B", bound=pydantic.BaseModel)
 
 class Socket:
+
+    default_max_body_size = 1 * 1024 * 1024
+
     """封装r, w提供api功能"""
-    def __init__(self, orig_stream_reader: asyncio.StreamReader, orig_stream_writer: asyncio.StreamWriter):
+    def __init__(
+            self,
+            orig_stream_reader: asyncio.StreamReader,
+            orig_stream_writer: asyncio.StreamWriter,
+
+    ):
         self.stream_reader = orig_stream_reader
         self.stream_writer = orig_stream_writer
         self.address = self.stream_writer.get_extra_info('peername')
@@ -32,35 +41,42 @@ class Socket:
 
         return size
 
-    async def get_bytes_msg(self, max_size: int = 1024):
+    async def get_bytes_msg(self, max_size: int | None = None):
         """获得bytes"""
         size = await self.get_head_size()
+
+        if max_size is None:
+            max_size = self.default_max_body_size
 
         if size > max_size:
             raise ExitSignal(f"太大的大小 期盼应该不大于{max_size} 实际为{size}")
 
+        buf = io.BytesIO()
+
         residual_size = size
-        body = b""
 
         while residual_size > 0:
             chunk = await self.get_chunk(residual_size)
-            body += chunk
+            buf.write(chunk)
             residual_size -= len(chunk)
 
-        return body
+        return buf.getvalue()
 
-    async def get_str_msg(self, max_size: int = 1024, encoding: str="utf-8"):
+    async def get_str_msg(self, max_size: int | None = None, encoding: str = "utf-8"):
         """获得str数据"""
         return (await self.get_bytes_msg(max_size)).decode(encoding)
 
-    async def get_json_msg(self, max_size: int = 1024):
+    async def get_json_msg(self, max_size: int | None = None):
         """获得json数据"""
         try:
             return json.loads(await self.get_bytes_msg(max_size))
         except json.JSONDecodeError as e:
             raise ExitSignal(f"解析json失败 - {e}")
 
-    async def get_payload(self, base_model:type[B], max_size: int=1024) -> B:
+    async def get_msgpack(self, max_size: int | None = None):
+        ...
+
+    async def get_payload(self, base_model:type[B], max_size: int | None = None) -> B:
         """获得结构体"""
         json_data = await self.get_json_msg(max_size)
 

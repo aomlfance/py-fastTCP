@@ -26,17 +26,17 @@ async def run_route(route: Route, ctx:Context):
 
         if inspect.iscoroutinefunction(route.handler):
             return await route.handler(**injection_kwargs)
-        elif inspect.isgeneratorfunction(route.handler):
+        elif inspect.isasyncgenfunction(route.handler):
             times = 0
             gen = route.handler(**injection_kwargs)
             # 这里想要达成的效果是区分yield, return
-            with contextlib.closing(gen):
+            with contextlib.aclosing(gen):
                 while True:
-                    if times >= 128:
-                        logger.error("已经迭代了太多次了")
+                    if times >= ctx.endure:
+                        logger.error("超出忍耐次数")
                         return default_response(408)
                     try:
-                        res = next(gen)
+                        res = await anext(gen)
                     except StopIteration as e:
                         if e.value is None:
                             logger.error("根据生成器路由规范, 要明确结束对话应该使用return而不是自然耗尽.")
@@ -120,7 +120,6 @@ class FastTCP(Blueprint):
             raise
         else:
             logger.info(f"{request_payload.cmd} - {res.status_code}")
-
 
     async def start(self):
         logging.basicConfig(
