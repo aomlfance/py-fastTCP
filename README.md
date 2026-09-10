@@ -15,6 +15,10 @@
 - **生成器对话** — 用 `yield` 实现多轮交互式对话
 - **蓝图** — 支持模块化拆分路由
 
+## 事先
+
+**该项目仍在开发阶段, 尚未定型**
+
 ## 安装
 
 ```bash
@@ -44,28 +48,8 @@ asyncio.run(app.start())
 
 ### 客户端
 
-```python
-import socket
-import json
-import struct
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(("127.0.0.1", 8964))
-
-def send(cmd: str, body: dict = None):
-    payload = json.dumps({"cmd": cmd, "body": body or {}}).encode()
-    sock.sendall(struct.pack("!I", len(payload)) + payload)
-
-def recv() -> dict:
-    size = struct.unpack("!I", sock.recv(4))[0]
-    return json.loads(sock.recv(size))
-
-send("hey", {"name": "World"})
-print(recv())
-# {'status_code': 200, 'body': {'data': 'hey World'}}
-
-sock.close()
-```
+> [!TIP]
+> 对应SDK客户端开发已经提上行程
 
 ## 路由
 
@@ -122,6 +106,7 @@ def tuple_resp():
 @app.before("hey")
 def check_auth(ctx: Context):
     if "token" not in ctx.payload.body:
+
         abort_code(401)
     ctx["user"] = verify_token(ctx.payload.body["token"])
 ```
@@ -132,13 +117,16 @@ def check_auth(ctx: Context):
 
 ```python
 @app.after("hey")
-def log_response(ctx: Context):
+def log_response(ctx: Context, response: ResponsePayload):
     print(f"请求完成: {ctx.payload.cmd}")
     return {"logged": True}  # 必须返回 ResponsePayload
 ```
 
-### 全局中间件
+> [!WARNING]
+> 有关`app.after`中路由函数怎么通知修改了响应仍在裁定  
+> 但在当前中, 需要返回`ResponsePayload`, 可以通过`make_response`生成
 
+### 全局中间件
 ```python
 @app.before("*")
 def global_before(ctx: Context):
@@ -148,6 +136,9 @@ def global_before(ctx: Context):
 def global_after(ctx: Context):
     print(f"耗时: {time.time() - ctx['start_time']}s")
 ```
+
+> [!WARNING]
+> 由于蓝图尚未定型, 有关可能在蓝图中的`bp.before("*")`产生的歧义仍在裁定
 
 ## 依赖注入
 
@@ -182,18 +173,9 @@ def greet(name: str):
 
 ## 生成器对话
 
-用 `yield` 发送多条消息，`return` 结束对话：
-
-```python
-@app.route("dialog")
-def dialog(ctx: Context):
-    yield {"msg": "请输入你的名字"}
-    name = ctx.socket.get_str_msg()  # 等待客户端回复
-    yield {"msg": f"你好 {name}"}
-    return {"msg": "对话结束"}
-```
-
-客户端收到 `status_code: 100` 表示对话继续，`200` 表示结束。
+> [!WARNING]
+> **关于原生成器对话**  
+> 该部分内容还在审计是否公开api
 
 ## 错误处理
 
@@ -216,8 +198,7 @@ def error():
 响应: {"status_code": 状态码, "body": {响应数据}}
 ```
 
+> [!WARNING]
+> 关于协议, 正打算迭代为MessagePack处理序列化.
+
 状态码复用 HTTP 状态码体系（200 成功、404 未找到、500 服务器错误等）。
-
-## License
-
-MIT
