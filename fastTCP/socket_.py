@@ -2,7 +2,10 @@ import asyncio
 import json
 import struct
 import pydantic
-from typing import TypeVar, Any
+from typing import TypeVar, Any, overload, get_origin, get_args
+
+from cffi.model import UnionType
+
 from .exceptions import ExitSignal
 import io
 
@@ -76,17 +79,31 @@ class Socket:
     async def get_msgpack(self, max_size: int | None = None):
         ...
 
-    async def get_payload(self, base_model:type[B], max_size: int | None = None) -> B:
-        """获得结构体"""
+    async def get_payload(self, base_model: type[B] | list[type[B]], max_size: int | None = None) -> B:
+        """
+        :param base_model: 结构体对象, 可以为一个pydantic.BaseModel的基类, 或列表分割表示宽容多个结构体类型
+        :param max_size: 允许的body最大字节大小
+        :return: 由base_model决定, 返回其怒许结构体类型的实例
+        """
         json_data = await self.get_json_msg(max_size)
 
         if not isinstance(json_data, dict):
             raise ExitSignal(f"客户端 {self.address} 发送了一个非dict的json数据")
 
-        try:
-            return base_model(**json_data)
-        except pydantic.ValidationError as e:
-            raise ExitSignal(f"解析payload错误 - {e}")
+        permit_of_rage_list = base_model if isinstance(base_model, list) else [base_model]
+
+        lastest = len(permit_of_rage_list) - 1
+
+        for i, b in enumerate(permit_of_rage_list):
+            try:
+                return b(**json_data)
+            except pydantic.ValidationError as e:
+                if i == lastest:
+                    raise ExitSignal(f"解析payload错误 - {e}")
+                else:
+                    continue
+        else:
+            raise AssertionError("in get_payload()")
 
     async def send_bytes_msg(self, msg: bytes) -> None:
         """发送bytes"""
