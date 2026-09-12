@@ -3,7 +3,6 @@ from enum import Enum
 from typing import Callable, ParamSpec, TypeVar, Concatenate, TypeAlias, Any
 import logging
 from .context import Context
-from .utils import name
 from .chain import Chain
 from re import compile, escape, Pattern
 

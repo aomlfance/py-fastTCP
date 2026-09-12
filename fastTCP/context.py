@@ -15,34 +15,13 @@ class Context:
         self.socket = aom_socket
         self.payload = payload
         self.store: dict[str, Any] = {}
-        self._endure = self.default_endure
-
-    @property
-    def endure(self):
-        return self._endure
-
-    @endure.setter
-    def endure(self, value: int):
-        if not isinstance(value, int):
-            raise TypeError("endure must be an integer")
-        if value > 512:
-            warn("endure 有点多大了")
-        self._endure = value
 
     def set(self, key: str, value: Any):
         """
         使用该函数, 会为之后的路由注入参数.
 
         Example:
-            @app.before("hello")
-            def get_user_name(ctx):
-                user_name = ...
-                ctx.set("user_name", user_name)
-                # 又或者是 ctx["user_name"] = user_name
-
-            @app.on("hello")
-            def hello(ctx, user_name):
-                return f"hello {user_name}"
+            ctx[arg] = value
         """
         self.store[key] = value
 

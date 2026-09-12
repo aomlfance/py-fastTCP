@@ -19,15 +19,26 @@ class Socket:
             self,
             orig_stream_reader: asyncio.StreamReader,
             orig_stream_writer: asyncio.StreamWriter,
-
+            max_body_size: int = default_max_body_size,
+            timeout: int | float = float("inf")
     ):
         self.stream_reader = orig_stream_reader
         self.stream_writer = orig_stream_writer
         self.address = self.stream_writer.get_extra_info('peername')
+        self.max_body_size = max_body_size
+        self.timeout = timeout
 
     async def get_chunk(self, size:int):
         """获得块"""
-        if not (chunk := await self.stream_reader.read(size)):
+        try:
+            chunk = await asyncio.wait_for(
+                self.stream_reader.read(size),
+                self.timeout
+            )
+        except asyncio.TimeoutError:
+            raise ExitSignal("超时")
+
+        if not chunk:
             raise ExitSignal(f'客户端{self.address}退出连接')
         else:
             return chunk
@@ -140,5 +151,3 @@ class Socket:
                 await self.stream_writer.wait_closed()
         except (ConnectionResetError, BrokenPipeError):
             pass
-        except Exception as e:
-            print(f"关闭连接时发生未知错误: {e}")

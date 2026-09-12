@@ -1,6 +1,6 @@
+from typing import Callable
 import pydantic
-
-from chain import Chain
+from .chain import Chain
 from .socket_ import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
@@ -11,9 +11,14 @@ import inspect
 import asyncio
 import logging
 from .route import Blueprint, Route
-import contextlib
 
 logger = logging.getLogger(__name__)
+
+async def run_func(func: Callable, *args, **kwargs):
+    if inspect.iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    else:
+        return func(*args, **kwargs)
 
 async def run_route(route: Route, ctx:Context):
     """区分异步同步运行"""
@@ -26,13 +31,7 @@ async def run_route(route: Route, ctx:Context):
         except pydantic.ValidationError as e:
             return default_response(400)
 
-        if inspect.iscoroutinefunction(route.handler):
-            return await route.handler(**injection_kwargs)
-        elif inspect.isasyncgenfunction(route.handler):
-            logger.warning("当前版本不再允许生成器路由")
-            return default_response(500)
-        else:
-            return route.handler(**injection_kwargs)
+        return await run_func(route.handler, **injection_kwargs)
     except Abort as e:
         return e.response
     except ExitSignal:
@@ -57,25 +56,43 @@ async def run_chain(context: Context, chain: Chain) -> ResponsePayload:
             res = default_response(204)
 
     res = make_response(res)
+    last_res = res
 
     for after_route in chain.after:
-        res = make_response(await run_route(after_route, context))
+        context["response"] = res
+        res = await run_route(after_route, context)
+
+        if res is None:
+            res = last_res
 
     return res
 
 
-
 class FastTCP(Blueprint):
-    def __init__(self, host: str = "127.0.0.1", port: int = 8080):
+    def __init__(
+            self,
+            host: str = "127.0.0.1",
+            port: int = 8080,
+            timeout: int | float = float("inf"),
+    ):
         self.host = host
         self.port = port
         super().__init__()
         self.server = asyncio.start_server(self.handle_client, self.host, self.port)
         self.clients = {}
+        self.disconnect_handler: Callable | None = None
+        self.disconnect_handler_inj: bool = False
+        self.timeout = timeout
 
+    def on_disconnect(self, func):
+        self.disconnect_handler = func
+        parameters = inspect.signature(func).parameters
+        if len(parameters) != 0:
+            self.disconnect_handler_inj = True
+        return func
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        socket = Socket(reader, writer)
+        socket = Socket(reader, writer, timeout=self.timeout)
         self.clients[socket.address] = socket
 
         logger.info(f"客户端接入 - {socket.address}")
@@ -83,13 +100,16 @@ class FastTCP(Blueprint):
         try:
             while True:
                 await self.main_handler(socket)
-        except ExitSignal as e:
-            logger.info(f"客户端退出 - {e}")
-        except (ConnectionResetError, BrokenPipeError) as e:
+        except (ExitSignal, ConnectionResetError, BrokenPipeError)  as e:
             logger.info(f"客户端退出 - {e}")
         finally:
             await socket.close()
             self.clients.pop(socket.address, None)
+            if callable(self.disconnect_handler):
+                args = ()
+                if self.disconnect_handler_inj:
+                    args = (socket, )
+                await run_func(self.disconnect_handler, *args)
 
     async def main_handler(self, socket: Socket):
         request_payload = await socket.get_payload(RequestPayload)
