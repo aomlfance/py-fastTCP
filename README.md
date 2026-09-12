@@ -35,21 +35,46 @@ pip install -e .
 
 ```python
 from fastTCP import FastTCP, Context
+import pydantic
 import asyncio
 
 app = FastTCP(host="127.0.0.1", port=8964)
 
+
+class User(pydantic.BaseModel):
+    name: str
+
+
+
 @app.route("hey")
-def hey(name: str):
-    return f"hey {name}"
+def hey(user: User):
+    return f"hey {user.name}"
 
 asyncio.run(app.start())
 ```
 
 ### 客户端
 
-> [!TIP]
-> 对应SDK客户端开发已经提上行程
+```python
+from fastTCP.client import ClientFastTCP
+import pydantic
+import asyncio
+
+cli = ClientFastTCP()
+
+
+class User(pydantic.BaseModel):
+    name: str
+
+
+# 暂时不支持路由
+
+async def main():
+    res = await cli.request("hey", User(name="user"))
+    print(res.body.get("data"))
+
+asyncio.run(main())
+```
 
 ## 路由
 
@@ -72,7 +97,7 @@ def greet():
 def get_user(id: int):
     return f"user {id}"
 
-@app.route("file.<path:name>")
+@app.route("file.<str:name>")
 def get_file(name: str):
     return f"file {name}"
 ```

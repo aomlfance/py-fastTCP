@@ -2,10 +2,9 @@ import asyncio
 import json
 import struct
 import pydantic
-from typing import TypeVar, Any, overload, get_origin, get_args
-
-from cffi.model import UnionType
-
+from typing import TypeVar, Any
+from .request import make_requests
+from .payload import ResponsePayload
 from .exceptions import ExitSignal
 import io
 
@@ -127,6 +126,11 @@ class Socket:
     async def send_payload(self, msg: B, encoding: str="utf-8", **kwargs) -> None:
         """发送结构体"""
         await self.send_json_msg(msg.model_dump(**kwargs), encoding= encoding)
+
+    async def request(self, cmd: str, body: Any):
+        """该方法只适用服务端"""
+        await self.send_payload(make_requests(cmd, body))
+        return await self.get_payload(ResponsePayload)
 
     async def close(self):
         """关闭"""

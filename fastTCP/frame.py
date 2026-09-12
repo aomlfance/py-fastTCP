@@ -1,4 +1,6 @@
 import pydantic
+
+from chain import Chain
 from .socket_ import Socket
 from .exceptions import ExitSignal, Abort
 from .payload import RequestPayload, ResponsePayload
@@ -27,30 +29,8 @@ async def run_route(route: Route, ctx:Context):
         if inspect.iscoroutinefunction(route.handler):
             return await route.handler(**injection_kwargs)
         elif inspect.isasyncgenfunction(route.handler):
-            times = 0
-            gen = route.handler(**injection_kwargs)
-            # 这里想要达成的效果是区分yield, return
-            with contextlib.aclosing(gen):
-                while True:
-                    if times >= ctx.endure:
-                        logger.error("超出忍耐次数")
-                        return default_response(408)
-                    try:
-                        res = await anext(gen)
-                    except StopIteration as e:
-                        if e.value is None:
-                            logger.error("根据生成器路由规范, 要明确结束对话应该使用return而不是自然耗尽.")
-                            return None
-
-                        return e.value
-                    else:
-                        if res is None:
-                            logger.warning("yield应该返回明确的值!")
-                            res = default_response(100)
-
-                        await ctx.socket.send_payload(make_response(res, 100))
-                    finally:
-                        times += 1
+            logger.warning("当前版本不再允许生成器路由")
+            return default_response(500)
         else:
             return route.handler(**injection_kwargs)
     except Abort as e:
@@ -61,6 +41,30 @@ async def run_route(route: Route, ctx:Context):
         logger.error(f"{type(e)} - {e}")
         return default_response(500)
 
+
+async def run_chain(context: Context, chain: Chain) -> ResponsePayload:
+    context.store.update(chain.param)
+
+    for before_route in chain.before:
+        res = await run_route(before_route, context)
+
+        if res: break
+    else:
+        res = await run_route(chain.main_route, context)
+
+        if res is None:
+            logger.warning(f"{context.payload.cmd}主路由没有返回响应")
+            res = default_response(204)
+
+    res = make_response(res)
+
+    for after_route in chain.after:
+        res = make_response(await run_route(after_route, context))
+
+    return res
+
+
+
 class FastTCP(Blueprint):
     def __init__(self, host: str = "127.0.0.1", port: int = 8080):
         self.host = host
@@ -69,56 +73,35 @@ class FastTCP(Blueprint):
         self.server = asyncio.start_server(self.handle_client, self.host, self.port)
         self.clients = {}
 
-    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        aom_socket = Socket(reader, writer)
-        self.clients[aom_socket.address] = aom_socket
 
-        logger.info(f"客户端接入 - {aom_socket.address}")
+    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        socket = Socket(reader, writer)
+        self.clients[socket.address] = socket
+
+        logger.info(f"客户端接入 - {socket.address}")
 
         try:
             while True:
-                await self.main_handler(aom_socket)
+                await self.main_handler(socket)
         except ExitSignal as e:
             logger.info(f"客户端退出 - {e}")
         except (ConnectionResetError, BrokenPipeError) as e:
             logger.info(f"客户端退出 - {e}")
         finally:
-            await aom_socket.close()
-            self.clients.pop(aom_socket.address, None)
+            await socket.close()
+            self.clients.pop(socket.address, None)
 
-    async def main_handler(self, aom_socket: Socket):
-        request_payload = await aom_socket.get_payload(RequestPayload)
+    async def main_handler(self, socket: Socket):
+        request_payload = await socket.get_payload(RequestPayload)
 
-        context = Context(aom_socket, request_payload)
-        chain = self.get_chain(request_payload.cmd)
-        context.store.update(chain.param)
+        context = Context(socket, request_payload)
 
         try:
-            for before_route in chain.before:
-                res = await run_route(before_route, context)
-
-                if res: break
-            else:
-                res = await run_route(chain.main_route, context)
-
-                if res is None:
-                    logger.warning(f"{request_payload.cmd}主路由没有返回响应")
-                    res = default_response(204)
-
-            res = make_response(res)
-
-            for after_route in chain.after:
-                res = await run_route(after_route, context)
-
-                if not isinstance(res, ResponsePayload):
-                    logger.warning("after 路由应该也返回 ResponsePayload")
-                    res = default_response(500)
-                    break
-
-            await aom_socket.send_payload(res)
+            res = await run_chain(context, self.get_chain(context.payload.cmd))
         except:
             raise
         else:
+            await socket.send_payload(res)
             logger.info(f"{request_payload.cmd} - {res.status_code}")
 
     async def start(self):
