@@ -1,10 +1,7 @@
-from typing import Callable, Any
+from typing import Any
 
-def get_callable_name(obj: Callable) -> str:
+def name(obj: Any) -> str:
     return obj.__name__ if hasattr(obj, "__name__") else str(obj)
 
-LEN_TO = 12
-
-def clipping_strings(string: str, len_to: int = LEN_TO) -> str:
-    return string if len(string) < len_to else string[:len_to]
-
+def short_name(obj: Any):
+    return repr(obj) if len(repr(obj)) < 12 else repr(obj)[:12]

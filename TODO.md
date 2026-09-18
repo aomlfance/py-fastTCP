@@ -1,5 +1,4 @@
 # fastTCP 待办
-
 - [ ] **优化协议**
   - [ ] 使用MessagePack作为体
   - [ ] 重新定义协议
@@ -7,11 +6,17 @@
 - [ ] **对应客户端SDK开发**
   - [x] 同样拥有路由功能`@app.route()`
   - [x] 请求的实现(基于队列`deque`)
+  - [ ] 异步, 同步支持(实际基于异步)
 - [x] **超时支持**
 - [ ] **支持软编码**
-  - [x] 删除了[socket_.py](./fastTCP/socket_.py)中的`1024 bytes`硬编码, 现在默认`1MB`
-  - [x] 将`max_size`实例化, 不用调用`get_bytes_msg`在重复填参数
+  - [x] 删除了[socket_.py](src/fastTCP/socket_.py)中的`1024 bytes`硬编码, 现在默认`1MB`
+  - [ ] 将`max_size`实例化, 不用调用`get_bytes_msg`在重复填参数
+- [x] **删除生成器路由**  
+  **协程生成器可能与同步混淆语义**  
+  协程生成器不予`return`非空, 但在之前大多数版本通过StopIteration.value来确定最终响应.  
+  并且在路由中也需要通过`await sock.get_chunk`来交流.
+  并且在大多场景下不需要对话式, 这可能减少代码内聚.
+  > [!NOTE]
+  > 即使可能需要, 但介于当前的[规范](./README.md#fasttcp)暂不予提供接口
+- [ ] 开发同步线程版(只是一个可能)
 - [ ] **TLS支持**
-- [ ] **read()串行处理(server也搞个队列)**
-- [ ] **socket储存状态支持**
-

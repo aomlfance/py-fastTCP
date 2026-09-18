@@ -34,7 +34,7 @@ pip install -e .
 ### 服务端
 
 ```python
-from fastTCP import FastTCP, Context
+from src.fastTCP import FastTCP, Context
 import pydantic
 import asyncio
 
@@ -45,10 +45,10 @@ class User(pydantic.BaseModel):
     name: str
 
 
-
 @app.route("hey")
 def hey(user: User):
     return f"hey {user.name}"
+
 
 asyncio.run(app.start())
 ```
@@ -56,7 +56,7 @@ asyncio.run(app.start())
 ### 客户端
 
 ```python
-from fastTCP.client import ClientFastTCP
+from client import ClientFastTCP
 import pydantic
 import asyncio
 
@@ -71,10 +71,12 @@ class User(pydantic.BaseModel):
 def hey():
     return "hey server"
 
+
 async def main():
-    await cli.client()
+    await cli.connect()
     res = await cli.request("hey", User(name="user"))
     print(res.body.get("data"))
+
 
 asyncio.run(main())
 ```
@@ -204,11 +206,13 @@ def greet(name: str):
 ## 短路处理
 
 ```python
-from fastTCP.response import abort_code, abort_args
+from response import abort_code, abort_args
+
 
 @app.route("forbidden")
 def forbidden():
     abort_code(403)
+
 
 @app.route("error")
 def error():

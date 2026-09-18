@@ -21,7 +21,7 @@ def on_disconnect():
 async def client():
     await asyncio.sleep(0.5)          # 等服务端起来
     cli = ClientFastTCP()
-    await cli.client()   # 按库的实际连接 API 改
+    await cli.connect()   # 按库的实际连接 API 改
     # 故意不发任何消息，等待服务端超时
     await asyncio.sleep(8)
 

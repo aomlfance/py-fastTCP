@@ -41,7 +41,6 @@ class Socket:
         if not chunk:
             raise ExitSignal(f'客户端{self.address}退出连接')
         else:
-            print(chunk)
             return chunk
 
     async def get_head_size(self) -> int:
@@ -135,7 +134,7 @@ class Socket:
         """发送json数据"""
         return await self.send_str_msg(json.dumps(msg, default=str), encoding= encoding)
 
-    async def send_payload(self, msg: pydantic.BaseModel, encoding: str="utf-8", **kwargs) -> None:
+    async def send_payload(self, msg: B, encoding: str="utf-8", **kwargs) -> None:
         """发送结构体"""
         await self.send_json_msg(msg.model_dump(**kwargs), encoding= encoding)
 

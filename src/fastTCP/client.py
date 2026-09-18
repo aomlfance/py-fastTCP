@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Annotated
 from .payload import RequestPayload, ResponsePayload
 from .route import Blueprint
 from .socket_ import Socket
@@ -16,7 +16,6 @@ class ClientFastTCP(Blueprint):
             self,
             host: str = "127.0.0.1",
             port: int = 8080,
-
     ):
         super().__init__()
         self.host = host
@@ -43,7 +42,7 @@ class ClientFastTCP(Blueprint):
         await self.socket.send_payload(req)
         fut = self._enqueue()
         return await fut
-    
+
     @property
     def socket(self) -> Socket:
         """使_socket的结果幂等"""
@@ -51,7 +50,7 @@ class ClientFastTCP(Blueprint):
             raise RuntimeError("_socket未初始化")
         return self._socket
 
-    async def client(self):
+    async def connect(self):
         self._socket = Socket(
             *(await asyncio.open_connection(self.host, self.port))
         )
