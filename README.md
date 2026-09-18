@@ -67,9 +67,12 @@ class User(pydantic.BaseModel):
     name: str
 
 
-# 暂时不支持路由
+@cli.route("hey")
+def hey():
+    return "hey server"
 
 async def main():
+    await cli.client()
     res = await cli.request("hey", User(name="user"))
     print(res.body.get("data"))
 
@@ -144,12 +147,8 @@ def check_auth(ctx: Context):
 @app.after("hey")
 def log_response(ctx: Context, response: ResponsePayload):
     print(f"请求完成: {ctx.payload.cmd}")
-    return {"logged": True}  # 必须返回 ResponsePayload
+    return {"logged": True}
 ```
-
-> [!WARNING]
-> 有关`app.after`中路由函数怎么通知修改了响应仍在裁定  
-> 但在当前中, 需要返回`ResponsePayload`, 可以通过`make_response`生成
 
 ### 全局中间件
 ```python
@@ -162,7 +161,7 @@ def global_after(ctx: Context):
     print(f"耗时: {time.time() - ctx['start_time']}s")
 ```
 
-> [!WARNING]
+> [!NOTE]
 > 由于蓝图尚未定型, 有关可能在蓝图中的`bp.before("*")`产生的歧义仍在裁定
 
 ## 依赖注入
@@ -202,7 +201,7 @@ def greet(name: str):
 > **关于原生成器对话**  
 > 该部分内容还在审计是否公开api
 
-## 错误处理
+## 短路处理
 
 ```python
 from fastTCP.response import abort_code, abort_args

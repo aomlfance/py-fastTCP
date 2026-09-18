@@ -1,3 +1,5 @@
 .idea
 .codewhale
 *.pyc
+__pycache__
+.pytest_cache
