@@ -5,8 +5,6 @@ from warnings import warn
 
 class Context:
 
-    default_endure = 256
-
     def __init__(
             self,
             aom_socket: Socket,

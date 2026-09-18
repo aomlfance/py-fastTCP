@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from fastTCP import FastTCP, ClientFastTCP
+from src.fastTCP import FastTCP, ClientFastTCP
 
 # 用列表记录回调是否触发（协程/回调里改局部变量不可见）
 events = []

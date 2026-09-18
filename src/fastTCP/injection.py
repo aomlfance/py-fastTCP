@@ -1,11 +1,10 @@
 import pydantic
-
 from .context import Context
 from .route import Route
-from typing import get_origin, get_args, Literal, Union, Iterable
+from typing import get_origin, get_args, Union
 from types import NoneType, UnionType
 from .socket_ import Socket
-from .utils import short_name, name
+from .utils import get_callable_name
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,7 +41,7 @@ def injection(ctx: Context, route: Route):
         elif get_origin(param.annotation) in (UnionType, Union) and NoneType in get_args(param.annotation):
             value = None
         else:
-            raise TypeError(f"{name(route.handler)} 缺少参数{param.name}")
+            raise TypeError(f"{get_callable_name(route.handler)} 缺少参数{param.name}")
 
         kwargs[param.name] = value
 

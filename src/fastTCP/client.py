@@ -12,7 +12,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ClientFastTCP(Blueprint):
-    def __init__(self, host: str = "127.0.0.1", port: int = 8080):
+    def __init__(
+            self,
+            host: str = "127.0.0.1",
+            port: int = 8080,
+
+    ):
         super().__init__()
         self.host = host
         self.port = port
@@ -38,7 +43,7 @@ class ClientFastTCP(Blueprint):
         await self.socket.send_payload(req)
         fut = self._enqueue()
         return await fut
-
+    
     @property
     def socket(self) -> Socket:
         """使_socket的结果幂等"""
@@ -56,7 +61,6 @@ class ClientFastTCP(Blueprint):
         asyncio.create_task(self._recv_loop())
         logger.info(f"连接到 {self.socket.address}")
 
-    # 想一下我们的业务场景, 假如如果客户端要 request, response, (bytes先不支持)
     async def _recv_loop(self):
         while True:
             if self.socket.stream_writer.is_closing():

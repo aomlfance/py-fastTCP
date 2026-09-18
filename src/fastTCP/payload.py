@@ -7,3 +7,4 @@ class RequestPayload(pydantic.BaseModel):
 class ResponsePayload(pydantic.BaseModel):
     status_code: int
     body: dict
+

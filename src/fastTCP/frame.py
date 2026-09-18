@@ -85,14 +85,19 @@ class FastTCP(Blueprint):
         self.timeout = timeout
 
     def on_disconnect(self, func):
+        if self.disconnect_handler is not None:
+            print()
+
         self.disconnect_handler = func
+
         parameters = inspect.signature(func).parameters
+
         if len(parameters) != 0:
             self.disconnect_handler_inj = True
         return func
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        socket = Socket(reader, writer, timeout=self.timeout)
+        socket: Socket = Socket(reader, writer, timeout=self.timeout)
         self.clients[socket.address] = socket
 
         logger.info(f"客户端接入 - {socket.address}")
@@ -104,7 +109,9 @@ class FastTCP(Blueprint):
             logger.info(f"客户端退出 - {e}")
         finally:
             await socket.close()
+
             self.clients.pop(socket.address, None)
+            
             if callable(self.disconnect_handler):
                 args = ()
                 if self.disconnect_handler_inj:
