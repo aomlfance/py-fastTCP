@@ -1,4 +1,20 @@
-from typing import Any
+from typing import Any, Callable
+import inspect
+import asyncio
+
+class Async:
+    def __init__(self, func: Callable):
+        """
+        将函数包装为异步
+        :param func: 原函数
+        """
+        self.func = func
+
+    async def __call__(self, *args, **kwargs):
+        if inspect.iscoroutinefunction(self.func):
+            return await self.func(*args, **kwargs)
+        else:
+            return await asyncio.to_thread(self.func, *args, **kwargs)
 
 def name(obj: Any) -> str:
     return obj.__name__ if hasattr(obj, "__name__") else str(obj)

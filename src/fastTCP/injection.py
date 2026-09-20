@@ -1,10 +1,13 @@
+from typing import get_origin, get_args, Literal, Union, Iterable, TYPE_CHECKING
 import pydantic
 from .context import Context
-from .route import Route
-from typing import get_origin, get_args, Literal, Union, Iterable
+
+if TYPE_CHECKING:
+    from .route import Route
+
 from types import NoneType, UnionType
-from .socket_ import Socket
-from .utils import short_name, name
+from .socket_ import  Socket
+from .utils import name
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,11 +21,11 @@ def injection(ctx: Context, route: Route):
 
     for index, param in enumerate(route.handler_sig.parameters.values()):
         # Socket, Context的优先级最高, 不允许注入
-        if param.annotation in (Socket, Context):
-            if param.annotation == Socket:
-                kwargs[param.name] = ctx.socket
-            else:
-                kwargs[param.name] = ctx
+        if param.annotation == Socket:
+            kwargs[param.name] = ctx.socket
+            continue
+        elif param.annotation == Context:
+            kwargs[param.name] = ctx
             continue
 
         # 注入

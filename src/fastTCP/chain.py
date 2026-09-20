@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any
+from .context import Context
 
 if TYPE_CHECKING:
     from .route import Route
@@ -15,3 +16,6 @@ class Chain:
         self.main_route = main_route
         self.after = after
         self.param = param or {}
+
+    def __call__(self, context: Context):
+        ...

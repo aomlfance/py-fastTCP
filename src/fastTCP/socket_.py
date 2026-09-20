@@ -2,26 +2,34 @@ import asyncio
 import json
 import struct
 import pydantic
-from typing import TypeVar, Any
+from .request_dq import RequestDequeManager
+from typing import TypeVar, Any, TYPE_CHECKING, Protocol
+from .payload import RequestPayload
 from .request import make_requests
-from .payload import ResponsePayload
 from .exceptions import ExitSignal
 import io
 
 B = TypeVar("B", bound=pydantic.BaseModel)
 
-class Socket:
+DEF_MAX_BODY_SIZE = 1 * 1024 * 1024
 
-    default_max_body_size = 1 * 1024 * 1024
+class Socket(Protocol):
+    """实际向外开放的类"""
+    async def request(self, cmd: str , body: Any) -> RequestPayload:
+        ...
+
+class _Socket:
 
     """封装r, w提供api功能"""
     def __init__(
             self,
+            req_dq_mg: RequestDequeManager,
             orig_stream_reader: asyncio.StreamReader,
             orig_stream_writer: asyncio.StreamWriter,
-            max_body_size: int = default_max_body_size,
+            max_body_size: int = DEF_MAX_BODY_SIZE,
             timeout: int | float = float("inf")
     ):
+        self.req_dq_mg = req_dq_mg
         self.stream_reader = orig_stream_reader
         self.stream_writer = orig_stream_writer
         self.address = self.stream_writer.get_extra_info('peername')
@@ -59,7 +67,7 @@ class Socket:
         size = await self.get_head_size()
 
         if max_size is None:
-            max_size = self.default_max_body_size
+            max_size = DEF_MAX_BODY_SIZE
 
         if size > max_size:
             raise ExitSignal(f"太大的大小 期盼应该不大于{max_size} 实际为{size}")
@@ -138,10 +146,9 @@ class Socket:
         """发送结构体"""
         await self.send_json_msg(msg.model_dump(**kwargs), encoding= encoding)
 
-    async def request(self, cmd: str, body: Any):
-        """该方法只适用服务端"""
+    async def request(self, cmd: str , body: Any):
         await self.send_payload(make_requests(cmd, body))
-        return await self.get_payload(ResponsePayload)
+        return self.req_dq_mg.enqueue()
 
     async def close(self):
         """关闭"""

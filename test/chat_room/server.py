@@ -1,4 +1,4 @@
-from src.fastTCP import FastTCP
+from src.fastTCP import FastTCPServer
 
-app = FastTCP()
+app = FastTCPServer()
 

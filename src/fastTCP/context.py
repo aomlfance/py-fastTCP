@@ -1,7 +1,6 @@
-from .socket_ import Socket
+from .socket_ import _Socket
 from .payload import RequestPayload
 from typing import Any
-from warnings import warn
 
 class Context:
 
@@ -9,10 +8,10 @@ class Context:
 
     def __init__(
             self,
-            aom_socket: Socket,
+            socket: _Socket,
             payload: RequestPayload
     ):
-        self.socket = aom_socket
+        self.socket = socket
         self.payload = payload
         self.store: dict[str, Any] = {}
 

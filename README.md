@@ -2,7 +2,11 @@
 
 > 一个风格类似 FastAPI / Flask 的 Python TCP 框架
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![Python](https://img.shields.io/badge/Python-3.14+-blue)
+
+> [!NOTE]
+> 并非依赖了3.14以上的模块, 而是基于[PEP 649](https://peps.python.org/pep-0649/)进行开发.  
+> 实际支持仍在python3.10+
 
 异步、简洁、类 Flask/FastAPI 代码风格，让写 TCP 像写 Web 框架一样简单。
 
@@ -34,11 +38,11 @@ pip install -e .
 ### 服务端
 
 ```python
-from src.fastTCP import FastTCP, Context
+from src.fastTCP import FastTCPServer, Context
 import pydantic
 import asyncio
 
-app = FastTCP(host="127.0.0.1", port=8964)
+app = FastTCPServer(host="127.0.0.1", port=8964)
 
 
 class User(pydantic.BaseModel):
@@ -50,7 +54,7 @@ def hey(user: User):
     return f"hey {user.name}"
 
 
-asyncio.run(app.start())
+asyncio.run(app.serve_forever())
 ```
 
 ### 客户端

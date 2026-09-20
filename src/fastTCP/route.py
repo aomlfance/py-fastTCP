@@ -2,9 +2,15 @@ import inspect
 from enum import Enum
 from typing import Callable, ParamSpec, TypeVar, Concatenate, TypeAlias, Any
 import logging
+from .payload import ResponsePayload
 from .context import Context
 from .chain import Chain
 from re import compile, escape, Pattern
+from .injection import injection
+from .response import default_response
+import pydantic
+from .utils import Async
+from .exceptions import Abort, ExitSignal
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +26,25 @@ class Route:
         self.type = type_
         self.echo_log = echo_log
         self.handler_sig = inspect.signature(handler)
+
+    async def __call__(self, ctx: Context) -> ResponsePayload:
+        try:
+            try:
+                injection_kwargs = injection(ctx, self)
+            except TypeError as e:
+                logger.error(f"{type(e)} - {e}")
+                return default_response(500)
+            except pydantic.ValidationError as e:
+                return default_response(400)
+
+            return await Async(self.handler)(**injection_kwargs)
+        except Abort as e:
+            return e.response
+        except ExitSignal:
+            raise
+        except Exception as e:
+            logger.error(f"{type(e)} - {e}")
+            return default_response(500)
 
 def unknown_cmd():
     return "unknown_cmd", 404
@@ -78,35 +103,7 @@ class RoutesManager:
 
     def add_route(self, route: Route):
         for cmd in route.cmds:
-            can_match = is_match_cmd(cmd)
-
-            obj = self.dynamic_chains if can_match else self.chains
-            cmd = to_pat(cmd) if can_match else cmd
-
-            if can_match and route.type != RouteTypes.ROUTE:
-                obj = self.dynamic_before if route.type == RouteTypes.BEFORE_ROUTE else self.dynamic_after
-
-                if cmd not in obj:
-                    obj[cmd] = [route]
-                else:
-                    obj[cmd].append(route)
-
-                return
-
-            if cmd not in obj:
-                chain = Chain([], unknown_cmd_route, [])
-                obj[cmd] = chain
-            else:
-                chain = obj[cmd]
-
-            if route.type == RouteTypes.ROUTE:
-                chain.main_route = route
-            elif route.type == RouteTypes.BEFORE_ROUTE:
-                chain.before.append(route)
-            elif route.type == RouteTypes.AFTER_ROUTE:
-                chain.after.append(route)
-            else:
-                raise TypeError(f"Unknown route type: {route.type}")
+            ...
 
     def get_chain(self, cmd: str):
         params = None
@@ -147,11 +144,13 @@ decorator: TypeAlias = Callable[[Callable[P, R]], Callable[P, R]]
 class Blueprint(RoutesManager):
     """蓝图, 在路由管理者的基础上添加注册功能"""
     def _route(self, cmds: list[str] | str, type_: RouteTypes = RouteTypes.ROUTE) -> decorator:
-        def decorator(handler: Callable[Concatenate[Context, P], R]) -> Callable[Concatenate[Context, P], R]:
+
+        def decorator_(handler: Callable[Concatenate[Context, P], R]) -> Callable[Concatenate[Context, P], R]:
             route = Route(cmds, handler, type_)
             self.add_route(route)
             return handler
-        return decorator
+
+        return decorator_
 
     def before(self, cmds: list[str] | str):
         return self._route(cmds, RouteTypes.BEFORE_ROUTE)

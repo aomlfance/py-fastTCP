@@ -1,17 +1,17 @@
 from .route import Route, RouteTypes
 from .response import make_response, abort_code
-from .frame import FastTCP
+from .frame import FastTCPServer
 from .context import Context
 from .client import ClientFastTCP
-from .socket_ import Socket
+from .socket_ import _Socket
 
 __all__ = [
     "Route",
     "RouteTypes",
     "make_response",
     "abort_code",
-    "FastTCP",
+    "FastTCPServer",
     "Context",
     "ClientFastTCP",
-    "Socket",
+    "_Socket",
 ]

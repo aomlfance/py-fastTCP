@@ -1,12 +1,11 @@
 import asyncio
-import pytest
 
-from src.fastTCP import FastTCP, ClientFastTCP
+from src.fastTCP import FastTCPServer, ClientFastTCP
 
 # 用列表记录回调是否触发（协程/回调里改局部变量不可见）
 events = []
 
-ser = FastTCP(timeout=5)  # 按库的实际参数改
+ser = FastTCPServer(timeout=5)  # 按库的实际参数改
 
 @ser.route("test_timeout")
 def timeout():
@@ -26,7 +25,7 @@ async def client():
     await asyncio.sleep(8)
 
 async def run_scenario():
-    server_task = asyncio.create_task(ser.start())
+    server_task = asyncio.create_task(ser.serve_forever())
     try:
         await client()
     finally:
@@ -34,10 +33,9 @@ async def run_scenario():
         with pytest.raises(asyncio.CancelledError):
             await server_task
 
-@pytest.mark.asyncio
 async def test_disconnect_on_timeout():
     events.clear()
-    server_task = asyncio.create_task(ser.start())
+    ser.suspend()
     try:
         await client()
     finally:
