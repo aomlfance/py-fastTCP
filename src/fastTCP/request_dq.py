@@ -1,7 +1,12 @@
 import collections
 import asyncio
-from .payload import ResponsePayload
 
+from typing import TYPE_CHECKING, final
+
+if TYPE_CHECKING:
+    from .payload import ResponsePayload
+
+@final
 class RequestDequeManager:
     def __init__(self):
         self._req_dq = collections.deque()
@@ -22,6 +27,3 @@ class RequestDequeManager:
 
     def can_dequeue(self) -> bool:
         return bool(self._req_dq)
-
-    def __init_subclass__(cls) -> None:
-        raise TypeError("Inheritance is not allowed in this class.")

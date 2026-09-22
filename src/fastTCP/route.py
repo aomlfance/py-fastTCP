@@ -1,11 +1,16 @@
+import logging
 import inspect
 from enum import Enum
-from typing import Callable, ParamSpec, TypeVar, Concatenate, TypeAlias, Any
-import logging
-from .payload import ResponsePayload
-from .context import Context
-from .chain import Chain
 from re import compile, escape, Pattern
+
+from typing import Callable, ParamSpec, TypeVar, TypeAlias, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .context import Context
+    from .chain import Chain
+    from .response import Response
+
+from .response import NoneResponse, make_response
 from .injection import injection
 from .response import default_response
 import pydantic
@@ -20,14 +25,22 @@ class RouteTypes(Enum):
     AFTER_ROUTE = "after-route"
 
 class Route:
-    def __init__(self, cmds: list[str] | str, handler: Callable, type_: RouteTypes, echo_log: bool = True):
+    def __init__(
+            self,
+            cmds: list[str] | str,
+            handler: Callable,
+            type_: RouteTypes,
+            echo_log: bool = True
+    ):
         self.cmds =  cmds if isinstance(cmds, list) else [cmds]
         self.handler = handler
         self.type = type_
         self.echo_log = echo_log
         self.handler_sig = inspect.signature(handler)
 
-    async def __call__(self, ctx: Context) -> ResponsePayload:
+    async def __call__(self, ctx: Context) -> Response:
+        result = None
+
         try:
             try:
                 injection_kwargs = injection(ctx, self)
@@ -37,14 +50,26 @@ class Route:
             except pydantic.ValidationError as e:
                 return default_response(400)
 
-            return await Async(self.handler)(**injection_kwargs)
+            result = await Async(self.handler)(**injection_kwargs)
         except Abort as e:
-            return e.response
+            result = e.response
         except ExitSignal:
             raise
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"{type(e)} - {e}")
-            return default_response(500)
+            result = default_response(500)
+
+        if result is None:
+            if self.type == RouteTypes.ROUTE:
+                result = default_response(204)
+            else:
+                result = NoneResponse()
+        else:
+            result = make_response(result)
+
+        return result
+
+
 
 def unknown_cmd():
     return "unknown_cmd", 404
@@ -145,7 +170,7 @@ class Blueprint(RoutesManager):
     """蓝图, 在路由管理者的基础上添加注册功能"""
     def _route(self, cmds: list[str] | str, type_: RouteTypes = RouteTypes.ROUTE) -> decorator:
 
-        def decorator_(handler: Callable[Concatenate[Context, P], R]) -> Callable[Concatenate[Context, P], R]:
+        def decorator_(handler: Callable[P, R]) -> Callable[P, R]:
             route = Route(cmds, handler, type_)
             self.add_route(route)
             return handler

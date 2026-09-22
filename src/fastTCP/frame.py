@@ -1,9 +1,7 @@
 from typing import Callable
-from .chain import Chain
 from .socket_ import _Socket
 from .exceptions import ExitSignal
 from .payload import RequestPayload, ResponsePayload
-from .response import default_response, make_response
 from .context import Context
 from .request_dq import RequestDequeManager
 import inspect
@@ -13,35 +11,6 @@ from .route import Blueprint
 from .utils import Async
 
 logger = logging.getLogger(__name__)
-
-async def run_chain(context: Context, chain: Chain) -> ResponsePayload:
-    context.store.update(chain.param)
-
-    for before_route in chain.before:
-        res = await before_route(context)
-
-        if res is not None: break
-    else:
-        res = await chain.main_route(context)
-
-        if res is None:
-            logger.warning(f"{context.payload.cmd}主路由没有返回响应")
-            res = default_response(204)
-
-    res = make_response(res)
-    last_res = res
-
-    for after_route in chain.after:
-        context["response"] = res
-        res = await after_route(context)
-
-        if res is None:
-            res = last_res
-        else:
-            res = make_response(res)
-
-    return res
-
 
 class FastTCPServer(Blueprint): # ReqDqMg
     def __init__(
@@ -108,7 +77,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
         context = Context(socket, payload)
 
         try:
-            res = await run_chain(context, self.get_chain(context.payload.cmd))
+            res = await self.get_chain(context.payload.cmd)(context)
         except:
             raise
         else:

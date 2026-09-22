@@ -1,22 +1,34 @@
 """
 fastCTP继用了HTTP状态码, 来表达服务器的响应状态
 """
-from typing import Any, NoReturn
+from typing import Any, NoReturn, TypeAlias
 from .payload import ResponsePayload
 from .http_status import HTTP_STATUS
 from .exceptions import Abort
 import logging
 
+class NoneResponse:
+    def __bool__(self):
+        return False
+
+Response: TypeAlias = NoneResponse | ResponsePayload
+
+JSON_support_unless_object: TypeAlias = str | int | float | list | bool | None
+
+JSON_support: TypeAlias = JSON_support_unless_object | dict[str, JSON_support_unless_object]
+
+route_result: TypeAlias = tuple[JSON_support, int] | tuple[JSON_support] | JSON_support | Response
+
 logger = logging.getLogger(__name__)
 
 def make_response(
-        res: tuple[Any, int] | ResponsePayload | tuple[Any] | Any,
+        res: route_result ,
         default_status_code: int = 200,
-):
+) -> Response:
     """
     用来将路由函数传来的值转为ResponsePayload
     """
-    if isinstance(res, ResponsePayload):
+    if isinstance(res, Response):
         return res
 
     if not isinstance(res, tuple):
@@ -48,5 +60,5 @@ def abort_args(*args) -> NoReturn:
     # 所有提供此接口
     raise Abort(make_response(args))
 
-def abort_res(res: ResponsePayload) -> NoReturn:
+def abort_res(res: Response) -> NoReturn:
     raise Abort(res)

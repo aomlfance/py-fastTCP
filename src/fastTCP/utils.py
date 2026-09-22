@@ -9,6 +9,15 @@ class Async:
         :param func: 原函数
         """
         self.func = func
+        self._sig = None
+
+    @property
+    def __signature__(self):
+        if self._sig is None:
+            self._sig = inspect.signature(self.func)
+            return self.__signature__
+        else:
+            return self._sig
 
     async def __call__(self, *args, **kwargs):
         if inspect.iscoroutinefunction(self.func):
