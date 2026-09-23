@@ -43,6 +43,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         socket = _Socket(self, reader, writer, timeout=self.timeout)
+
         self.clients[socket.address] = socket
 
         logger.info(f"客户端接入 - {socket.address}")
