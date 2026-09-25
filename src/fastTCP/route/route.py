@@ -55,6 +55,9 @@ class Route:
         return self._sig
 
     async def __call__(self, ctx: Context) -> Response:
+        """
+        :return: 倘若route.type为RouteTypes.ROUTE必定返回ResponsePayload
+        """
         result = None
 
         try:

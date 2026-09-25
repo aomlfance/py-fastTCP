@@ -8,7 +8,7 @@ from src.fastTCP.route.blueprint import RoutesManager
 from src.fastTCP.response import make_response, abort_code, abort_args, NoneResponse
 from src.fastTCP.payload import RequestPayload, ResponsePayload
 from src.fastTCP.request import make_requests
-from src.fastTCP.context import _Context
+from src.fastTCP.context import _Context, Context
 from src.fastTCP.request_dq import RequestDequeManager
 from src.fastTCP.utils import Async
 from src.fastTCP.injection import injection
@@ -217,8 +217,7 @@ class TestInjection:
         ctx = _Context()
         ctx.short["payload"] = RequestPayload(cmd="test", body={})
 
-        def handler(ctx): pass
-        # 需要 Route 对象，用 Route 构造
+        def handler(ctx: Context): pass
         route = Route("test", handler, RouteTypes.ROUTE)
         kwargs = injection(ctx, route)
         assert "ctx" in kwargs
@@ -227,7 +226,7 @@ class TestInjection:
     def test_inject_from_context_store(self):
         ctx = _Context()
         ctx.short["payload"] = RequestPayload(cmd="test", body={})
-        ctx["name"] = "alice"
+        ctx.short["name"] = "alice"
 
         def handler(name: str): pass
         route = Route("test", handler, RouteTypes.ROUTE)

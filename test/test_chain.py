@@ -9,6 +9,9 @@ from src.fastTCP.chain import Chain
 from src.fastTCP.context import _Context
 from src.fastTCP.payload import RequestPayload, ResponsePayload
 from src.fastTCP.response import NoneResponse
+import pydantic
+from src.fastTCP.exceptions import Abort, ExitSignal
+from src.fastTCP.response import default_response
 
 
 # ── RoutesManager ─────────────────────────────────────────────────────────────
@@ -69,7 +72,7 @@ class TestRoutesManager:
         mgr.add_route(self._make_route("user.<int:id>", get_user))
 
         chain = mgr.get_chain("user.42")
-        assert chain.main_route is get_user
+        assert chain.main_route.handler is get_user
 
     def test_dynamic_route_not_matching(self):
         mgr = RoutesManager()
@@ -217,3 +220,199 @@ class TestChain:
         await chain(ctx)
         # param 应该在 context.short 中
         assert ctx.short.get("id") == "42"
+
+
+# ── Route.__call__ ─────────────────────────────────────────────────────────────
+
+def _make_ctx_with_socket(cmd="test"):
+    """带 socket mock 的 context，用于 Route.__call__（需要 payload 在 long 里）"""
+    ctx = _Context()
+    ctx.short["payload"] = RequestPayload(cmd=cmd, body={})
+    return ctx
+
+
+class TestRouteCall:
+    @pytest.mark.asyncio
+    async def test_sync_handler_returns_value(self):
+        def handler():
+            return "hello"
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.body == {"data": "hello"}
+
+    @pytest.mark.asyncio
+    async def test_async_handler_returns_value(self):
+        async def handler():
+            return {"key": "val"}
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.body == {"key": "val"}
+
+    @pytest.mark.asyncio
+    async def test_handler_returns_tuple_with_status(self):
+        def handler():
+            return "created", 201
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.status_code == 201
+
+    @pytest.mark.asyncio
+    async def test_handler_returns_dict_directly(self):
+        def handler():
+            return {"a": 1}
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.body == {"a": 1}
+
+    @pytest.mark.asyncio
+    async def test_handler_returns_none_gives_204(self):
+        def handler():
+            return None
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.status_code == 204
+
+    @pytest.mark.asyncio
+    async def test_handler_returns_none_before_gives_none_response(self):
+        def handler():
+            return None
+        route = Route("test", handler, RouteTypes.BEFORE_ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert isinstance(res, NoneResponse)
+
+    @pytest.mark.asyncio
+    async def test_abort_code_in_handler(self):
+        def handler():
+            raise Abort(default_response(403))
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_handler_exception_gives_500(self):
+        def handler():
+            raise ValueError("boom")
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_exit_signal_propagates(self):
+        def handler():
+            raise ExitSignal("timeout")
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        with pytest.raises(ExitSignal):
+            await route(ctx)
+
+    @pytest.mark.asyncio
+    async def test_pydantic_validation_error_gives_400(self):
+        class Strict(pydantic.BaseModel):
+            required_field: int
+
+        def handler(s: Strict):  # type: ignore
+            return "ok"
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        # body 为空，Strict 校验会失败
+        res = await route(ctx)
+        assert res.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_injection_error_gives_500(self):
+        def handler(unknown_param: int):  # 没有默认值，ctx 里也没有
+            return "ok"
+        route = Route("test", handler, RouteTypes.ROUTE)
+        ctx = _make_ctx_with_socket()
+        res = await route(ctx)
+        assert res.status_code == 500
+
+
+# ── Blueprint 装饰器 ──────────────────────────────────────────────────────────
+
+class TestBlueprint:
+    def test_route_decorator(self):
+        mgr = RoutesManager()
+
+        # 模拟 Blueprint.route 装饰器
+        def route(cmds):
+            def decorator(handler):
+                route_obj = Route(cmds, handler, RouteTypes.ROUTE)
+                mgr.add_route(route_obj)
+                return handler
+            return decorator
+
+        @route("hello")
+        def hello():
+            return "hello"
+
+        chain = mgr.get_chain("hello")
+        assert chain.main_route.handler is hello
+
+    def test_route_list_cmds(self):
+        """一个路由函数注册多个 cmd"""
+        mgr = RoutesManager()
+
+        def route(cmds):
+            def decorator(handler):
+                route_obj = Route(cmds, handler, RouteTypes.ROUTE)
+                mgr.add_route(route_obj)
+                return handler
+            return decorator
+
+        @route(["hey", "hi", "hello"])
+        def greet():
+            return "hi"
+
+        for cmd in ["hey", "hi", "hello"]:
+            chain = mgr.get_chain(cmd)
+            assert chain.main_route.handler is greet
+
+    def test_before_and_after_on_same_cmd(self):
+        """同一 cmd 注册 before + route + after"""
+        mgr = RoutesManager()
+        order = []
+
+        def make_route(cmd, handler, type_):
+            r = Route(cmd, handler, type_)
+            mgr.add_route(r)
+
+        make_route("test", lambda: order.append("before") or None, RouteTypes.BEFORE_ROUTE)
+        make_route("test", lambda: order.append("main") or "ok", RouteTypes.ROUTE)
+        make_route("test", lambda: order.append("after") or None, RouteTypes.AFTER_ROUTE)
+
+        chain = mgr.get_chain("test")
+        assert len(chain.before) == 1
+        assert len(chain.after) == 1
+        assert chain.main_route is not None
+
+    def test_global_before_with_wildcard(self):
+        """before("*") 应该匹配所有 cmd"""
+        mgr = RoutesManager()
+
+        def global_before():
+            return None
+
+        mgr.add_route(Route("*", global_before, RouteTypes.BEFORE_ROUTE))
+        mgr.add_route(Route("hello", lambda: "hi", RouteTypes.ROUTE))
+
+        chain = mgr.get_chain("hello")
+        assert len(chain.before) == 1
+
+    def test_dynamic_before_before_static_route(self):
+        """通配符 before 应该作用于匹配的静态路由"""
+        mgr = RoutesManager()
+
+        mgr.add_route(Route("user.<int:id>", lambda: "user", RouteTypes.ROUTE))
+        mgr.add_route(Route("user.<str:name>", lambda: None, RouteTypes.BEFORE_ROUTE))
+
+        chain = mgr.get_chain("user.42")
+        assert len(chain.before) == 1

@@ -27,7 +27,7 @@ class Chain:
         for before_route in self.before:
             res = await before_route(context)
 
-            if not res: break
+            if res: break
         else:
             res = await self.main_route(context)
 

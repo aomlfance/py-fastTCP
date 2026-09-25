@@ -40,12 +40,11 @@ pip install -e .
 ### 服务端
 
 ```python
-from src.fastTCP import FastTCPServer, _Context
+from src.fastTCP import FastTCPServer
 import pydantic
 import asyncio
 
 app = FastTCPServer(host="127.0.0.1", port=8964)
-
 
 class User(pydantic.BaseModel):
     name: str

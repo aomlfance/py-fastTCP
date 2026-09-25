@@ -1,8 +1,4 @@
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from re import Pattern
-
+from re import Pattern
 from .route import Route
 from ..chain import Chain
 from .route import RouteTypes
