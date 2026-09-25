@@ -1,9 +1,9 @@
-from typing import get_origin, get_args, Literal, Union, Iterable, TYPE_CHECKING
+from typing import get_origin, get_args, Union, TYPE_CHECKING, final, TypeVar, Annotated, Literal
 import pydantic
-from .context import Context
 
 if TYPE_CHECKING:
     from .route import Route
+    from .context import Context
 
 from types import NoneType, UnionType
 from .socket_ import  Socket
@@ -22,19 +22,19 @@ def injection(ctx: Context, route: Route):
     for index, param in enumerate(route.handler_sig.parameters.values()):
         # Socket, Context的优先级最高, 不允许注入
         if param.annotation == Socket:
-            kwargs[param.name] = ctx.socket
+            kwargs[param.name] = ctx["socket"]
             continue
         elif param.annotation == Context:
             kwargs[param.name] = ctx
             continue
 
         # 注入
-        if param.name in ctx.store:
+        if param.name in ctx:
             value = ctx[param.name]
         # 绑定
         elif isinstance(param.annotation, type) and issubclass(param.annotation, pydantic.BaseModel):
             try:
-                value = param.annotation(**ctx.payload.body)
+                value = param.annotation(**ctx["payload"].body)
             except pydantic.ValidationError:
                 raise
         # 否则优先取默认值

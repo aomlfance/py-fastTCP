@@ -3,7 +3,7 @@ from .payload import RequestPayload, ResponsePayload
 from .route import Blueprint
 from .socket_ import _Socket
 from .frame import run_chain
-from .context import Context
+from .context import _Context
 from .request import make_requests
 from .request_dq import RequestDequeManager
 from .socket_ import _Socket
@@ -25,6 +25,7 @@ class ClientFastTCP(Blueprint, _Socket):
         self.host = host
         self.port = port
         self._socket: _Socket | None = None
+        self.context = _Context()
 
     async def request(self, cmd: str, body: Any) -> ResponsePayload:
         req = make_requests(cmd, body)
@@ -38,6 +39,8 @@ class ClientFastTCP(Blueprint, _Socket):
     async def connect(self):
         _Socket.__init__(self, self._req_dq_mg, *(await asyncio.open_connection(self.host, self.port)))
 
+        self.context.long["socket"] = self
+
         asyncio.create_task(self._recv_loop())
 
         logger.info(f"连接到 {self.address}")
@@ -47,7 +50,11 @@ class ClientFastTCP(Blueprint, _Socket):
             if self.stream_writer.is_closing():
                 break
 
+            self.context.refresh()
+
             payload: RequestPayload | ResponsePayload = await self.get_payload([RequestPayload, ResponsePayload])
+
+            self.context.short["payload"] = payload
 
             if isinstance(payload, ResponsePayload):
 
@@ -57,10 +64,8 @@ class ClientFastTCP(Blueprint, _Socket):
                 self._req_dq_mg.dequeue(payload)
                 continue
 
-            context = Context(self, payload)
-
             try:
-                res = await run_chain(context, self.get_chain(payload.cmd))
+                res = await run_chain(self.context, self.get_chain(payload.cmd))
             except:
                 raise
             else:

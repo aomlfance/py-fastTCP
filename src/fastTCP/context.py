@@ -1,47 +1,56 @@
-from .socket_ import _Socket
-from .payload import RequestPayload
-from typing import Any
+from typing import Any, Protocol, Self
+from warnings import warn
+from .utils import Async
 
-class Context:
+class Context(Protocol):
+    """对外api"""
+    long: dict[str, Any]
+    short: dict[str, Any]
 
-    default_endure = 256
+    def get(self, key: str, default: Any = None) -> Any: ...
+    def __getitem__(self, item: str) -> Any: ...
+    def __contains__(self, item: str) -> bool: ...
+    # 关于set, 与del
+    # 必须显式申明生命周期
 
-    def __init__(
-            self,
-            socket: _Socket,
-            payload: RequestPayload
-    ):
-        self.socket = socket
-        self.payload = payload
-        self.store: dict[str, Any] = {}
+class _Context[_has_item]:
+    def __init__(self, **kwargs):
+        self.long: dict[str, Any] = {}
+        self.long.update(kwargs)
 
-    def set(self, key: str, value: Any):
+        self.short: dict[str, Any] = {}
+
+    def get(self, key: str, default: Any = None) -> Any:
+        for m in (self.long, self.short):
+            if key in m: return m[key]
+        else:
+            return default
+
+    def __getitem__(self, item: str) -> Any:
+        if item not in self:
+            raise IndexError("item not in context")
+        else:
+            return self.get(item)
+
+    def __contains__(self, item: str) -> bool:
         """
-        使用该函数, 会为之后的路由注入参数.
-
         Example:
-            ctx[arg] = value
+            if "user" in ctx
+        :param item: keys to check
+        :return: bool
         """
-        self.store[key] = value
+        return item in self.long or item in self.short
 
-    __setitem__ = set
+    def refresh(self):
+        self.short.clear()
 
-    def remove(self, key: str):
-        """
-        会移除在set设置的参数, 防止影响之后的函数
-        """
-        try:
-            del self.store[key]
-        except KeyError:
-            raise
+    async def close(self):
+        for n, o in self.long.items():
+            if not hasattr(o, "close"):
+                continue
+            try:
+                await Async(o.close)()
+            except (OSError, IOError, BrokenPipeError, ConnectionResetError) as e:
+                warn(f"在释放 {n} 错误: {e}")
 
-    __delitem__ = remove
-
-    def get(self, key: str) -> Any | None:
-        return self.store.get(key)
-
-    def __getitem__(self, item: str):
-        return self.store[item]
-
-    def __contains__(self, item):
-        return item in self.store
+        self.long.clear()

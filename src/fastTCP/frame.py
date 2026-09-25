@@ -2,7 +2,7 @@ from typing import Callable
 from .socket_ import _Socket
 from .exceptions import ExitSignal
 from .payload import RequestPayload, ResponsePayload
-from .context import Context
+from .context import _Context, Context
 from .request_dq import RequestDequeManager
 import inspect
 import asyncio
@@ -22,9 +22,9 @@ class FastTCPServer(Blueprint): # ReqDqMg
         self.host = host
         self.port = port
 
-        Blueprint.__init__(self)
-        RequestDequeManager.__init__(self)
+        super().__init__()
 
+        self._req_dq_mg = RequestDequeManager()
         self.server_task = asyncio.start_server(self.handle_client, self.host, self.port)
 
         self.clients = {}
@@ -42,19 +42,21 @@ class FastTCPServer(Blueprint): # ReqDqMg
         return func
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        socket = _Socket(self, reader, writer, timeout=self.timeout)
+        socket = _Socket(self._req_dq_mg, reader, writer, timeout=self.timeout)
 
-        self.clients[socket.address] = socket
+        ctx = _Context(socket=socket)
+
+        self.clients[socket.address] = ctx
 
         logger.info(f"客户端接入 - {socket.address}")
 
         try:
             while True:
-                await self.main_handler(socket)
+                await self.main_handler(ctx)
         except (ExitSignal, ConnectionResetError, BrokenPipeError)  as e:
             logger.info(f"客户端退出 - {e}")
         finally:
-            await socket.close()
+            await ctx.close()
 
             self.clients.pop(socket.address, None)
 
@@ -67,18 +69,22 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
                 await Async(self.disconnect_handler)(*args)
 
-    async def main_handler(self, socket: _Socket):
+    async def main_handler(self, ctx : _Context):
+        ctx.refresh()
+
+        socket: _Socket = ctx["socket"]
+
         payload = await socket.get_payload([RequestPayload, ResponsePayload])
 
+        ctx.short["payload"] = payload
+
         if isinstance(payload, ResponsePayload):
-            if self.can_dequeue():
-                self.dequeue(payload)
+            if self._req_dq_mg.can_dequeue():
+                self._req_dq_mg.dequeue(payload)
             return
 
-        context = Context(socket, payload)
-
         try:
-            res = await self.get_chain(context.payload.cmd)(context)
+            res = await self.get_chain(payload.cmd)(ctx)
         except:
             raise
         else:

@@ -18,6 +18,9 @@ class Socket(Protocol):
     async def request(self, cmd: str , body: Any) -> RequestPayload:
         ...
 
+class KnownLengthMessage(Protocol):
+    length: int
+
 class _Socket:
 
     """封装r, w提供api功能"""

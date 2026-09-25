@@ -6,7 +6,7 @@ from re import compile, escape, Pattern
 from typing import Callable, ParamSpec, TypeVar, TypeAlias, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .context import Context
+    from .context import _Context, Context
     from .chain import Chain
     from .response import Response
 

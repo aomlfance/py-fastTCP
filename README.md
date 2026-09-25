@@ -12,6 +12,8 @@
 
 ## 特性
 
+fastTCP秉承着fastapi的设计理念
+
 - **装饰器路由** — `@app.route("cmd")` 注册路由，和 Flask 一样直观
 - **通配符路由** — `<int:id>`、`<str:name>`、`*` 全局匹配
 - **中间件链** — `before` / `after` 分别在路由前后执行
@@ -38,7 +40,7 @@ pip install -e .
 ### 服务端
 
 ```python
-from src.fastTCP import FastTCPServer, Context
+from src.fastTCP import FastTCPServer, _Context
 import pydantic
 import asyncio
 
