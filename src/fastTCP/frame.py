@@ -2,7 +2,7 @@ from typing import Callable
 from .socket_ import _Socket
 from .exceptions import ExitSignal
 from .payload import RequestPayload, ResponsePayload
-from .context import _Context, Context
+from .context import _Context
 from .request_dq import RequestDequeManager
 import inspect
 import asyncio
@@ -83,13 +83,10 @@ class FastTCPServer(Blueprint): # ReqDqMg
                 self._req_dq_mg.dequeue(payload)
             return
 
-        try:
-            res = await self.get_chain(payload.cmd)(ctx)
-        except:
-            raise
-        else:
-            await socket.send_payload(res)
-            logger.info(f"{payload.cmd} - {res.status_code}")
+        res = await self.get_chain(payload.cmd)(ctx)
+
+        await socket.send_payload(res)
+        logger.info(f"{payload.cmd} - {res.status_code}")
 
     async def serve_forever(self):
         server = await self.server_task

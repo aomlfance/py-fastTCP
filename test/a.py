@@ -1,12 +1,11 @@
-from src.fastTCP import FastTCPServer
-from asyncio import run
-from src.fastTCP.socket_ import Socket
+import asyncio
+from fastTCP import FastTCPServer
+import logging
 
 app = FastTCPServer()
 
 @app.route("hey")
-async def hey(sock: Socket):
-    await sock.request("hey", "none")
+def hey():
     return "hey"
 
-run(app.serve_forever())
+asyncio.run(app.serve_forever())

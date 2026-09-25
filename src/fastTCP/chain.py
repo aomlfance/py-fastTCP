@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 from warnings import warn
 
 if TYPE_CHECKING:
     from .route import Route
-    from .context import _Context, Context
+    from .context import Context
     from .response import ResponsePayload
 
 from .response import make_response, default_response
@@ -39,7 +39,7 @@ class Chain:
         last_res = res
 
         for after_route in self.after:
-            context["response"] = res
+            context.short["response"] = res
             res = await after_route(context)
 
             if not res:

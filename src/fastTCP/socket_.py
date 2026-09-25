@@ -3,7 +3,7 @@ import json
 import struct
 import pydantic
 from .request_dq import RequestDequeManager
-from typing import TypeVar, Any, TYPE_CHECKING, Protocol
+from typing import TypeVar, Any, TYPE_CHECKING, Protocol, Callable
 from .payload import RequestPayload
 from .request import make_requests
 from .exceptions import ExitSignal
@@ -20,6 +20,12 @@ class Socket(Protocol):
 
 class KnownLengthMessage(Protocol):
     length: int
+    parser: Callable
+
+class BaseSocket:
+    ...
+
+def default_coder(): ...
 
 class _Socket:
 
@@ -151,7 +157,7 @@ class _Socket:
 
     async def request(self, cmd: str , body: Any):
         await self.send_payload(make_requests(cmd, body))
-        return self.req_dq_mg.enqueue()
+        return await self.req_dq_mg.enqueue()
 
     async def close(self):
         """关闭"""

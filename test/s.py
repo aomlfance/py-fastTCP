@@ -1,5 +1,8 @@
 from src.fastTCP.client import ClientFastTCP
 import asyncio
+import logging
+
+logging.basicConfig(level=0)
 
 async def main():
     cli = ClientFastTCP()

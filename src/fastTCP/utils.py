@@ -15,7 +15,7 @@ class Async:
     def __signature__(self):
         if self._sig is None:
             self._sig = inspect.signature(self.func)
-            return self.__signature__
+            return self._sig
         else:
             return self._sig
 

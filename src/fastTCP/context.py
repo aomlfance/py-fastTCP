@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Self
+from typing import Any, Protocol
 from warnings import warn
 from .utils import Async
 
@@ -13,7 +13,7 @@ class Context(Protocol):
     # 关于set, 与del
     # 必须显式申明生命周期
 
-class _Context[_has_item]:
+class _Context:
     def __init__(self, **kwargs):
         self.long: dict[str, Any] = {}
         self.long.update(kwargs)
@@ -46,7 +46,7 @@ class _Context[_has_item]:
 
     async def close(self):
         for n, o in self.long.items():
-            if not hasattr(o, "close"):
+            if not hasattr(o, "close") or not callable(o.close):
                 continue
             try:
                 await Async(o.close)()

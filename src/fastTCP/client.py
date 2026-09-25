@@ -1,8 +1,6 @@
-from typing import Any, Annotated
+from typing import Any
 from .payload import RequestPayload, ResponsePayload
 from .route import Blueprint
-from .socket_ import _Socket
-from .frame import run_chain
 from .context import _Context
 from .request import make_requests
 from .request_dq import RequestDequeManager
@@ -65,7 +63,7 @@ class ClientFastTCP(Blueprint, _Socket):
                 continue
 
             try:
-                res = await run_chain(self.context, self.get_chain(payload.cmd))
+                res = await self.get_chain(payload.cmd)(self.context)
             except:
                 raise
             else:
