@@ -1,5 +1,5 @@
 import asyncio
-from fastTCP.frame import FastTCPServer
+from fastTCP.server import FastTCPServer
 from fastTCP.client import ClientFastTCP
 
 async def test():

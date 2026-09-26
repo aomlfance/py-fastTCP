@@ -1,9 +1,7 @@
 from typing import Callable
 from .socket_ import _Socket
 from .exceptions import ExitSignal
-from .payload import RequestPayload, ResponsePayload
 from .context import _Context
-from .request_dq import RequestDequeManager
 import inspect
 import asyncio
 import logging
@@ -24,7 +22,6 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
         super().__init__()
 
-        self._req_dq_mg = RequestDequeManager()
         self.server_task = asyncio.start_server(self.handle_client, self.host, self.port)
 
         self.clients = {}
@@ -42,9 +39,9 @@ class FastTCPServer(Blueprint): # ReqDqMg
         return func
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        socket = _Socket(self._req_dq_mg, reader, writer, timeout=self.timeout)
+        socket = _Socket(reader, writer, timeout=self.timeout)
 
-        ctx = _Context(socket=socket)
+        ctx = _Context(__socket__=socket)
 
         self.clients[socket.address] = ctx
 
@@ -55,38 +52,33 @@ class FastTCPServer(Blueprint): # ReqDqMg
                 await self.main_handler(ctx)
         except (ExitSignal, ConnectionResetError, BrokenPipeError)  as e:
             logger.info(f"客户端退出 - {e}")
-        finally:
-            await ctx.close()
 
-            self.clients.pop(socket.address, None)
+        await ctx.close()
 
-            if callable(self.disconnect_handler):
+        self.clients.pop(socket.address, None)
 
-                if self.disconnect_handler_inj:
-                    args = (socket, )
-                else:
-                    args = ()
+        if callable(self.disconnect_handler):
 
-                await Async(self.disconnect_handler)(*args)
+            if self.disconnect_handler_inj:
+                args = (socket, )
+            else:
+                args = ()
+
+            await Async(self.disconnect_handler)(*args)
 
     async def main_handler(self, ctx : _Context):
         ctx.refresh()
 
-        socket: _Socket = ctx["socket"]
+        socket: _Socket = ctx["__socket__"]
 
-        payload = await socket.get_payload([RequestPayload, ResponsePayload])
+        message = await socket.receive()
 
-        ctx.short["payload"] = payload
+        ctx.short["__message__"] = message
 
-        if isinstance(payload, ResponsePayload):
-            if self._req_dq_mg.can_dequeue():
-                self._req_dq_mg.dequeue(payload)
-            return
+        res = await self.get_chain(message.cmd)(ctx)
 
-        res = await self.get_chain(payload.cmd)(ctx)
-
-        await socket.send_payload(res)
-        logger.info(f"{payload.cmd} - {res.status_code}")
+        await socket.response(res)
+        logger.info(f"{message.cmd} - {res.status_code}")
 
     async def serve_forever(self):
         server = await self.server_task

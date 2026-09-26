@@ -227,8 +227,7 @@ def error():
 ## 协议格式
 
 ```
-请求: {"cmd": "路由名", "body": {任意数据}}
-响应: {"status_code": 状态码, "body": {响应数据}}
+[2 +- bytes size][cmd (> 0) | status_code (< 0) | push (= 0)][4 bytes size][body]
 ```
 
 > [!WARNING]

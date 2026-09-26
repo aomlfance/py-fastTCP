@@ -3,7 +3,7 @@ Layer 2 — 集成测试，需要真实 server + client
 """
 import pytest
 import asyncio
-from src.fastTCP.frame import FastTCPServer
+from src.fastTCP.server import FastTCPServer
 from src.fastTCP.client import ClientFastTCP
 from src.fastTCP.context import Context
 

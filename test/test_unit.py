@@ -11,7 +11,7 @@ from src.fastTCP.request import make_requests
 from src.fastTCP.context import _Context, Context
 from src.fastTCP.request_dq import RequestDequeManager
 from src.fastTCP.utils import Async
-from src.fastTCP.injection import injection
+from src.fastTCP.injection import inject
 import pydantic
 
 
@@ -219,7 +219,7 @@ class TestInjection:
 
         def handler(ctx: Context): pass
         route = Route("test", handler, RouteTypes.ROUTE)
-        kwargs = injection(ctx, route)
+        kwargs = inject(ctx, route)
         assert "ctx" in kwargs
         assert kwargs["ctx"] is ctx
 
@@ -230,7 +230,7 @@ class TestInjection:
 
         def handler(name: str): pass
         route = Route("test", handler, RouteTypes.ROUTE)
-        kwargs = injection(ctx, route)
+        kwargs = inject(ctx, route)
         assert kwargs["name"] == "alice"
 
     def test_inject_pydantic_from_body(self):
@@ -242,7 +242,7 @@ class TestInjection:
 
         def handler(m: M): pass
         route = Route("test", handler, RouteTypes.ROUTE)
-        kwargs = injection(ctx, route)
+        kwargs = inject(ctx, route)
         assert kwargs["m"].x == 1
 
     def test_inject_default_value(self):
@@ -251,7 +251,7 @@ class TestInjection:
 
         def handler(n: int = 42): pass
         route = Route("test", handler, RouteTypes.ROUTE)
-        kwargs = injection(ctx, route)
+        kwargs = inject(ctx, route)
         assert kwargs["n"] == 42
 
     def test_inject_optional_none(self):
@@ -260,7 +260,7 @@ class TestInjection:
 
         def handler(x: int | None = None): pass
         route = Route("test", handler, RouteTypes.ROUTE)
-        kwargs = injection(ctx, route)
+        kwargs = inject(ctx, route)
         # 可以是 None 或者默认值，取决于实现
         assert "x" in kwargs
 

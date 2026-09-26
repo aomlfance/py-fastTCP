@@ -2,7 +2,7 @@ from typing import Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..context import Context
-    from ..response import Response
+    from ..response import ResponseMessage
 
 from enum import Enum
 from re import Pattern
@@ -12,7 +12,7 @@ import pydantic
 
 from .match import is_match_cmd, to_pat
 from ..response import default_response, make_response, NoneResponse
-from ..injection import injection
+from ..injection import inject
 from ..utils import Async
 from ..exceptions import Abort, ExitSignal
 
@@ -54,7 +54,7 @@ class Route:
             self._sig = inspect.signature(self.handler)
         return self._sig
 
-    async def __call__(self, ctx: Context) -> Response:
+    async def __call__(self, ctx: Context) -> ResponseMessage | None:
         """
         :return: 倘若route.type为RouteTypes.ROUTE必定返回ResponsePayload
         """
@@ -62,7 +62,7 @@ class Route:
 
         try:
             try:
-                injection_kwargs = injection(ctx, self)
+                injection_kwargs = inject(ctx, self)
             except TypeError as e:
                 logger.error(f"{type(e)} - {e}")
                 return default_response(500)
@@ -81,8 +81,6 @@ class Route:
         if result is None:
             if self.type == RouteTypes.ROUTE:
                 result = default_response(204)
-            else:
-                result = NoneResponse()
         else:
             result = make_response(result)
 

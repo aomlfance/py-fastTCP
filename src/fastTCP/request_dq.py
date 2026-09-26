@@ -4,19 +4,19 @@ import asyncio
 from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
-    from .payload import ResponsePayload
+    from .socket_ import RequestMessage, ResponseMessage
 
 @final
 class RequestDequeManager:
     def __init__(self):
         self._req_dq = collections.deque()
 
-    def enqueue(self):
+    def enqueue(self) -> asyncio.Future[ResponseMessage]:
         fut = asyncio.get_running_loop().create_future()
         self._req_dq.append(fut)
         return fut
 
-    def dequeue(self, response: ResponsePayload):
+    def dequeue(self, response: ResponseMessage):
         if not self._req_dq:
             raise IndexError("deque is empty")
 

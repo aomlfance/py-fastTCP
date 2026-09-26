@@ -4,7 +4,7 @@ from warnings import warn
 if TYPE_CHECKING:
     from .route import Route
     from .context import Context
-    from .response import ResponsePayload
+    from .response import ResponseMessage
 
 from .response import make_response, default_response
 
@@ -21,18 +21,18 @@ class Chain:
         self.after = after
         self.param = param or {}
 
-    async def __call__(self, context: Context) -> ResponsePayload:
+    async def __call__(self, context: Context) -> ResponseMessage:
         context.short.update(self.param)
 
         for before_route in self.before:
             res = await before_route(context)
 
-            if res: break
+            if res is not None: break
         else:
             res = await self.main_route(context)
 
-            if not res:
-                warn(f"{context["payload"].cmd}主路由没有返回响应")
+            if res is None:
+                warn(f"{context["__message__"].cmd}主路由没有返回响应")
                 res = default_response(204)
 
         res = make_response(res)
@@ -42,7 +42,7 @@ class Chain:
             context.short["response"] = res
             res = await after_route(context)
 
-            if not res:
+            if res is None:
                 res = last_res
             else:
                 last_res = res

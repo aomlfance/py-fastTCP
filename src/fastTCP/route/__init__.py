@@ -1,2 +1,2 @@
 from .route import Route, RouteTypes
-from .blueprint import Blueprint
+from .blueprint import Blueprint, RoutesManager

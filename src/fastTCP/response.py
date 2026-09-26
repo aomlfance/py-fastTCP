@@ -1,34 +1,27 @@
 """
 fastCTP继用了HTTP状态码, 来表达服务器的响应状态
 """
-from typing import Any, NoReturn, TypeAlias
-from .payload import ResponsePayload
+from typing import Any, NoReturn
+from .socket_ import ResponseMessage
 from .http_status import HTTP_STATUS
 from .exceptions import Abort
 import logging
+import msgpack
 
 class NoneResponse:
     def __bool__(self):
         return False
 
-Response: TypeAlias = NoneResponse | ResponsePayload
-
-JSON_support_unless_object: TypeAlias = str | int | float | list | bool | None
-
-JSON_support: TypeAlias = JSON_support_unless_object | dict[str, JSON_support_unless_object]
-
-route_result: TypeAlias = tuple[JSON_support, int] | tuple[JSON_support] | JSON_support | Response
-
 logger = logging.getLogger(__name__)
 
 def make_response(
-        res: route_result ,
+        res,
         default_status_code: int = 200,
-) -> Response:
+) -> ResponseMessage:
     """
     用来将路由函数传来的值转为ResponsePayload
     """
-    if isinstance(res, Response):
+    if isinstance(res, ResponseMessage):
         return res
 
     if not isinstance(res, tuple):
@@ -36,17 +29,17 @@ def make_response(
     elif len(res) < 1:
         raise TypeError("参数错误 应该有返回值")
 
-    body = res[0] if isinstance(res[0], dict) else {"data": res[0]}
+    body = msgpack.packb(res[0])
     status_code = res[1] if len(res) > 1 else default_status_code
 
-    return ResponsePayload(status_code=status_code, body=body)
+    return ResponseMessage(status_code=status_code, body=body)
 
 def default_response(code: int, msg: str | None = None):
     if code not in HTTP_STATUS:
         logger.warning(f"{code} 是一个非HTTP标准响应码")
-        return ResponsePayload(status_code=code, body=({} if msg is None else {"msg": msg}) )
+        return make_response((msg, code))
     else:
-        return ResponsePayload(status_code=code, body=({"msg": HTTP_STATUS[code]["meaning"]} if msg is None else {"msg": msg}) )
+        return make_response((HTTP_STATUS[code]["meaning"] if msg is None else msg, code))
 
 # 为了不混淆歧义, abort 分为了 code 与 ResponsePayload
 def abort_code(code: int, msg: str | None = None) -> NoReturn:
@@ -59,6 +52,3 @@ def abort_args(*args) -> NoReturn:
     # 我们希望不要在 raise Abort(make_response())中再套一个元组
     # 所有提供此接口
     raise Abort(make_response(args))
-
-def abort_res(res: Response) -> NoReturn:
-    raise Abort(res)
