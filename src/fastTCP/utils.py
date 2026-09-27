@@ -25,6 +25,19 @@ class Async:
         else:
             return await asyncio.to_thread(self.func, *args, **kwargs)
 
+class _CannotClose:
+    def __init__(self, obj: object):
+        self.obj = obj
+
+    def __getattribute__(self, name: str, /) -> Any:
+        if name == "close":
+            return lambda : None
+        else:
+            return getattr(super().__getattribute__("obj"), name)
+
+def cannot_close(obj: object):
+    return _CannotClose(obj)
+
 def name(obj: Any) -> str:
     return obj.__name__ if hasattr(obj, "__name__") else str(obj)
 

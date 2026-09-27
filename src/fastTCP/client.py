@@ -1,8 +1,8 @@
 from typing import Any
+
+from .provider import Supplier
 from .route import Blueprint
 from .context import _Context
-from .request import make_requests
-from .request_dq import RequestDequeManager
 from .socket_ import _Socket
 import asyncio
 import logging
@@ -18,7 +18,11 @@ class ClientFastTCP(Blueprint, _Socket):
         super().__init__()
         self.host = host
         self.port = port
-        self.context = _Context()
+        self.supplier = Supplier.default()
+        self.context = _Context(__supplier__=self.supplier)
+
+    def provide(self, sell: type | str):
+        return self.supplier.provide(sell)
 
     async def connect(self):
         _Socket.__init__(self, *(await asyncio.open_connection(self.host, self.port)))
@@ -34,7 +38,7 @@ class ClientFastTCP(Blueprint, _Socket):
             if self.writer.is_closing():
                 break
 
-            self.context.refresh()
+            await self.context.refresh()
 
             message = await self.receive()
 

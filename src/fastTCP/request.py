@@ -1,4 +1,3 @@
-from .payload import RequestPayload
 import pydantic
 from typing import Any
 

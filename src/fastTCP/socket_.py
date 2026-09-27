@@ -1,20 +1,11 @@
 import asyncio
-import json
 import struct
-import pydantic
 
 from .request_dq import RequestDequeManager
-from typing import TypeVar, Any, TYPE_CHECKING, Protocol, Callable
-from types import SimpleNamespace
-from .payload import RequestPayload, ResponsePayload
-from .request import make_requests
+from typing import Any, Protocol
 from .exceptions import ExitSignal
 from dataclasses import dataclass
 import io
-
-B = TypeVar("B", bound=pydantic.BaseModel)
-
-DEF_MAX_BODY_SIZE = 1 * 1024 * 1024
 
 @dataclass
 class RequestMessage:

@@ -13,6 +13,17 @@ class Context(Protocol):
     # 关于set, 与del
     # 必须显式申明生命周期
 
+async def _clear(obj: dict):
+    for n, o in obj.items():
+        if not hasattr(o, "close") or not callable(o.close):
+            continue
+        try:
+            await Async(o.close)()
+        except (OSError, IOError, BrokenPipeError, ConnectionResetError) as e:
+            warn(f"在释放 {n} 错误: {e}")
+
+    obj.clear()
+
 class _Context:
     def __init__(self, **kwargs):
         self.long: dict[str, Any] = {}
@@ -21,6 +32,8 @@ class _Context:
         self.short: dict[str, Any] = {}
 
     def get(self, key: str, default: Any = None) -> Any:
+        if key == "__context__":
+            return self
         for m in (self.long, self.short):
             if key in m: return m[key]
         else:
@@ -39,18 +52,14 @@ class _Context:
         :param item: keys to check
         :return: bool
         """
+        if item == "__context__":
+            return True
         return item in self.long or item in self.short
 
-    def refresh(self):
-        self.short.clear()
+    async def refresh(self):
+        await _clear(self.short)
 
     async def close(self):
-        for n, o in self.long.items():
-            if not hasattr(o, "close") or not callable(o.close):
-                continue
-            try:
-                await Async(o.close)()
-            except (OSError, IOError, BrokenPipeError, ConnectionResetError) as e:
-                warn(f"在释放 {n} 错误: {e}")
+        await self.refresh()
+        await _clear(self.long)
 
-        self.long.clear()

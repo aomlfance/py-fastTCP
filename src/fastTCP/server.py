@@ -6,7 +6,8 @@ import inspect
 import asyncio
 import logging
 from .route import Blueprint
-from .utils import Async
+from .utils import Async, cannot_close
+from .provider import Supplier
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
     ):
         self.host = host
         self.port = port
+        self.supplier = Supplier.default()
 
         super().__init__()
 
@@ -31,6 +33,9 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
         self.timeout = timeout
 
+    def provide(self, sell: type | str):
+        return self.supplier.provide(sell)
+
     def on_disconnect(self, func):
         self.disconnect_handler = func
         parameters = inspect.signature(func).parameters
@@ -41,7 +46,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         socket = _Socket(reader, writer, timeout=self.timeout)
 
-        ctx = _Context(__socket__=socket)
+        ctx = _Context(__socket__=socket, __supplier__=self.supplier)
 
         self.clients[socket.address] = ctx
 
@@ -67,7 +72,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
             await Async(self.disconnect_handler)(*args)
 
     async def main_handler(self, ctx : _Context):
-        ctx.refresh()
+        await ctx.refresh()
 
         socket: _Socket = ctx["__socket__"]
 

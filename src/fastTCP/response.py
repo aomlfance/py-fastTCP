@@ -19,9 +19,12 @@ def make_response(
         default_status_code: int = 200,
 ) -> ResponseMessage:
     """
-    用来将路由函数传来的值转为ResponsePayload
+    用来将路由函数传来的值转为ResponseMessage
     """
     if isinstance(res, ResponseMessage):
+        return res
+
+    if isinstance(res, NoneResponse):
         return res
 
     if not isinstance(res, tuple):

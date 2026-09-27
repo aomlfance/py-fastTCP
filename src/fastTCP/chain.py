@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from .route import Route
     from .context import Context
     from .response import ResponseMessage
+    from .injection import Supplier
 
 from .response import make_response, default_response
 

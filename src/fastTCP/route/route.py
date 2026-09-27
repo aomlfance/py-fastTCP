@@ -23,11 +23,12 @@ class RouteTypes(Enum):
     BEFORE_ROUTE = "before-route"
     ROUTE = "route"
     AFTER_ROUTE = "after-route"
+    PROVIDER = "provider"
 
 class Route:
     def __init__(
             self,
-            cmds: list[str] | str,
+            cmds: list[str] | str ,
             handler: Callable,
             type_: RouteTypes,
             echo_log: bool = True

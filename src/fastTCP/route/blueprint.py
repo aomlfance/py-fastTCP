@@ -20,6 +20,8 @@ class RoutesManager:
 
         self.dynamic_routes: dict[Pattern, Route] = {}
 
+        self.provide_map: dict[type | str, Route] = {}
+
     def add_route(self, route: Route):
         for cmd in route.cmds:
             if isinstance(cmd, Pattern):
@@ -53,7 +55,7 @@ class RoutesManager:
                 elif route.type == RouteTypes.AFTER_ROUTE:
                     chain.after.append(route)
 
-    def get_chain(self, cmd: str):
+    def get_chain(self, cmd: str) -> Chain:
         params = None
 
         if _chain := self.chains.get(cmd):

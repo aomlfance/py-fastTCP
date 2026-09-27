@@ -2,17 +2,19 @@
 Layer 0 — 纯函数/类单元测试，零网络依赖
 """
 import pytest
+import msgpack
 from src.fastTCP.route.match import is_match_cmd, to_pat
 from src.fastTCP.route.route import Route, RouteTypes
 from src.fastTCP.route.blueprint import RoutesManager
 from src.fastTCP.response import make_response, abort_code, abort_args, NoneResponse
-from src.fastTCP.payload import RequestPayload, ResponsePayload
-from src.fastTCP.request import make_requests
+from src.fastTCP.socket_ import RequestMessage, ResponseMessage, _Socket
 from src.fastTCP.context import _Context, Context
 from src.fastTCP.request_dq import RequestDequeManager
 from src.fastTCP.utils import Async
-from src.fastTCP.injection import inject
+from src.fastTCP.injection import inject, inject_one
+from src.fastTCP.provider import Supplier, Provider
 import pydantic
+import inspect
 
 
 # ── match.py ──────────────────────────────────────────────────────────────────
@@ -66,47 +68,6 @@ class TestToPat:
         assert not pat.match("userXlist")
 
 
-# ── payload.py ────────────────────────────────────────────────────────────────
-
-class TestPayload:
-    def test_request_payload(self):
-        p = RequestPayload(cmd="hey", body={"name": "test"})
-        assert p.cmd == "hey"
-        assert p.body == {"name": "test"}
-
-    def test_response_payload(self):
-        p = ResponsePayload(status_code=200, body={"msg": "ok"})
-        assert p.status_code == 200
-
-    def test_request_payload_rejects_missing_cmd(self):
-        with pytest.raises(pydantic.ValidationError):
-            RequestPayload(body={})
-
-
-# ── request.py ────────────────────────────────────────────────────────────────
-
-class TestMakeRequests:
-    def test_from_string(self):
-        req = make_requests("hey", "hello")
-        assert req.cmd == "hey"
-        assert req.body == {"data": "hello"}
-
-    def test_from_dict(self):
-        req = make_requests("hey", {"key": "val"})
-        assert req.body == {"key": "val"}
-
-    def test_from_pydantic_model(self):
-        class M(pydantic.BaseModel):
-            name: str
-        req = make_requests("hey", M(name="test"))
-        assert req.body == {"name": "test"}
-
-    def test_from_request_payload_passthrough(self):
-        original = RequestPayload(cmd="hey", body={"a": 1})
-        result = make_requests("other", original)
-        assert result is original  # 原样返回，不复制
-
-
 # ── context.py ────────────────────────────────────────────────────────────────
 
 class TestContext:
@@ -129,10 +90,11 @@ class TestContext:
         assert "a" in ctx
         assert "b" not in ctx
 
-    def test_refresh_clears_short(self):
+    @pytest.mark.asyncio
+    async def test_refresh_clears_short(self):
         ctx = _Context()
         ctx.short["tmp"] = 123
-        ctx.refresh()
+        await ctx.refresh()
         assert "tmp" not in ctx
 
     def test_missing_key_raises(self):
@@ -140,23 +102,37 @@ class TestContext:
         with pytest.raises(IndexError):
             _ = ctx["nope"]
 
+    def test_context_magic_key(self):
+        ctx = _Context()
+        assert ctx["__context__"] is ctx
+
+    def test_context_magic_key_in_contains(self):
+        ctx = _Context()
+        assert "__context__" in ctx
+
+    @pytest.mark.asyncio
+    async def test_close_clears_long(self):
+        ctx = _Context(x=1)
+        await ctx.close()
+        assert "x" not in ctx.long
+
 
 # ── response.py ───────────────────────────────────────────────────────────────
 
 class TestMakeResponse:
     def test_string_wraps_in_dict(self):
         r = make_response("hello")
-        assert r.body == {"data": "hello"}
         assert r.status_code == 200
+        assert msgpack.unpackb(r.body) == "hello"
 
     def test_dict_passthrough(self):
         r = make_response({"key": "val"})
-        assert r.body == {"key": "val"}
+        assert msgpack.unpackb(r.body) == {"key": "val"}
 
     def test_tuple_body_and_status(self):
         r = make_response(("err", 404))
-        assert r.body == {"data": "err"}
         assert r.status_code == 404
+        assert msgpack.unpackb(r.body) == "err"
 
     def test_tuple_single_element(self):
         r = make_response(("ok",))
@@ -165,6 +141,18 @@ class TestMakeResponse:
     def test_none_response_passthrough(self):
         nr = NoneResponse()
         assert make_response(nr) is nr
+
+    def test_response_message_passthrough(self):
+        original = ResponseMessage(status_code=201, body=b"raw")
+        assert make_response(original) is original
+
+    def test_int_body(self):
+        r = make_response(42)
+        assert msgpack.unpackb(r.body) == 42
+
+    def test_list_body(self):
+        r = make_response([1, 2, 3])
+        assert msgpack.unpackb(r.body) == [1, 2, 3]
 
 
 class TestAbort:
@@ -186,11 +174,10 @@ class TestAbort:
 class TestRequestDequeManager:
     @pytest.mark.asyncio
     async def test_enqueue_dequeue(self):
-        import asyncio
         dqm = RequestDequeManager()
         fut = dqm.enqueue()
         assert not fut.done()
-        resp = ResponsePayload(status_code=200, body={"data": "ok"})
+        resp = ResponseMessage(status_code=200, body=b"ok")
         dqm.dequeue(resp)
         assert fut.result() is resp
 
@@ -207,25 +194,73 @@ class TestRequestDequeManager:
     def test_dequeue_empty_raises(self):
         dqm = RequestDequeManager()
         with pytest.raises(IndexError):
-            dqm.dequeue(ResponsePayload(status_code=200, body={}))
+            dqm.dequeue(ResponseMessage(status_code=200, body=b""))
+
+
+# ── provider.py ───────────────────────────────────────────────────────────────
+
+class TestSupplier:
+    def test_default_has_context_and_socket(self):
+        from src.fastTCP.socket_ import Socket
+        supplier = Supplier.default()
+        assert supplier.query(Context) is not None
+        assert supplier.query(Socket) is not None
+
+    def test_provide_and_query(self):
+        supplier = Supplier()
+
+        @supplier.provide("config")
+        def get_config():
+            return {"debug": True}
+
+        p = supplier.query("config")
+        assert p is not None
+
+    def test_provide_by_type(self):
+        supplier = Supplier()
+
+        class MyService:
+            pass
+
+        @supplier.provide(MyService)
+        def get_service():
+            return MyService()
+
+        p = supplier.query(MyService)
+        assert p is not None
+
+    def test_query_missing_returns_none(self):
+        supplier = Supplier()
+        assert supplier.query("nonexistent") is None
+
+    def test_default_context_provider_returns_ctx(self):
+        supplier = Supplier.default()
+        ctx = _Context()
+        provider = supplier.query(Context)
+        result = provider.handler(ctx)
+        assert result is ctx
+
+    def test_default_socket_provider_returns_socket(self):
+        from src.fastTCP.socket_ import Socket
+        supplier = Supplier.default()
+        provider = supplier.query(Socket)
+        assert provider is not None
 
 
 # ── injection.py ──────────────────────────────────────────────────────────────
 
+def _make_ctx_with_message(cmd="test", body=b""):
+    """构造带 message 的 context，用于注入测试"""
+    ctx = _Context(
+        __supplier__=Supplier.default(),
+    )
+    ctx.short["__message__"] = RequestMessage(cmd=cmd, body=body)
+    return ctx
+
+
 class TestInjection:
-    def test_inject_context(self):
-        ctx = _Context()
-        ctx.short["payload"] = RequestPayload(cmd="test", body={})
-
-        def handler(ctx: Context): pass
-        route = Route("test", handler, RouteTypes.ROUTE)
-        kwargs = inject(ctx, route)
-        assert "ctx" in kwargs
-        assert kwargs["ctx"] is ctx
-
     def test_inject_from_context_store(self):
-        ctx = _Context()
-        ctx.short["payload"] = RequestPayload(cmd="test", body={})
+        ctx = _make_ctx_with_message()
         ctx.short["name"] = "alice"
 
         def handler(name: str): pass
@@ -233,9 +268,33 @@ class TestInjection:
         kwargs = inject(ctx, route)
         assert kwargs["name"] == "alice"
 
+    def test_inject_default_value(self):
+        ctx = _make_ctx_with_message()
+
+        def handler(n: int = 42): pass
+        route = Route("test", handler, RouteTypes.ROUTE)
+        kwargs = inject(ctx, route)
+        assert kwargs["n"] == 42
+
+    def test_inject_optional_none(self):
+        ctx = _make_ctx_with_message()
+
+        def handler(x: int | None = None): pass
+        route = Route("test", handler, RouteTypes.ROUTE)
+        kwargs = inject(ctx, route)
+        assert "x" in kwargs
+
+    def test_inject_context_via_supplier(self):
+        ctx = _make_ctx_with_message()
+
+        def handler(ctx: Context): pass
+        route = Route("test", handler, RouteTypes.ROUTE)
+        kwargs = inject(ctx, route)
+        assert kwargs["ctx"] is ctx
+
     def test_inject_pydantic_from_body(self):
-        ctx = _Context()
-        ctx.short["payload"] = RequestPayload(cmd="test", body={"x": 1})
+        body = msgpack.packb({"x": 1})
+        ctx = _make_ctx_with_message(body=body)
 
         class M(pydantic.BaseModel):
             x: int
@@ -245,24 +304,47 @@ class TestInjection:
         kwargs = inject(ctx, route)
         assert kwargs["m"].x == 1
 
-    def test_inject_default_value(self):
-        ctx = _Context()
-        ctx.short["payload"] = RequestPayload(cmd="test", body={})
+    def test_inject_custom_provider(self):
+        supplier = Supplier.default()
 
-        def handler(n: int = 42): pass
+        @supplier.provide("greeting")
+        def get_greeting(ctx):
+            return f"hello from {ctx['__message__'].cmd}"
+
+        ctx = _make_ctx_with_message(cmd="greet")
+        ctx.short["__supplier__"] = supplier
+
+        def handler(greeting: str): pass
         route = Route("test", handler, RouteTypes.ROUTE)
         kwargs = inject(ctx, route)
-        assert kwargs["n"] == 42
+        assert kwargs["greeting"] == "hello from greet"
 
-    def test_inject_optional_none(self):
-        ctx = _Context()
-        ctx.short["payload"] = RequestPayload(cmd="test", body={})
+    def test_inject_type_based_provider(self):
+        supplier = Supplier.default()
 
-        def handler(x: int | None = None): pass
+        class MyService:
+            def __init__(self):
+                self.value = 99
+
+        @supplier.provide(MyService)
+        def get_service(ctx):
+            return MyService()
+
+        ctx = _make_ctx_with_message()
+        ctx.short["__supplier__"] = supplier
+
+        def handler(svc: MyService): pass
         route = Route("test", handler, RouteTypes.ROUTE)
         kwargs = inject(ctx, route)
-        # 可以是 None 或者默认值，取决于实现
-        assert "x" in kwargs
+        assert kwargs["svc"].value == 99
+
+    def test_inject_missing_param_raises(self):
+        ctx = _make_ctx_with_message()
+
+        def handler(unknown_param: int): pass
+        route = Route("test", handler, RouteTypes.ROUTE)
+        with pytest.raises(TypeError):
+            inject(ctx, route)
 
 
 # ── utils.py ──────────────────────────────────────────────────────────────────
