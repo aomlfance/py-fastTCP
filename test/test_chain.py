@@ -3,15 +3,28 @@ Layer 1 — 中间件链 + 路由匹配，需要 mock Route 但不需要网络
 """
 import pytest
 import asyncio
+import msgpack
 from src.fastTCP.route.route import Route, RouteTypes
 from src.fastTCP.route.blueprint import RoutesManager
 from src.fastTCP.chain import Chain
 from src.fastTCP.context import _Context
-from src.fastTCP.payload import RequestPayload, ResponsePayload
-from src.fastTCP.response import NoneResponse
+from src.fastTCP.socket_ import RequestMessage, ResponseMessage
+from src.fastTCP.provider import Supplier
 import pydantic
 from src.fastTCP.exceptions import Abort, ExitSignal
 from src.fastTCP.response import default_response
+
+
+def _make_ctx(cmd="test", body=b""):
+    """构造带 message + supplier 的 context"""
+    supplier = Supplier.default()
+    ctx = _Context(__supplier__=supplier)
+    ctx.short["__message__"] = RequestMessage(cmd=cmd, body=body)
+    return ctx
+
+
+def _make_simple_route(cmd, handler, type_=RouteTypes.ROUTE):
+    return Route(cmd, handler, type_)
 
 
 # ── RoutesManager ─────────────────────────────────────────────────────────────
@@ -33,7 +46,6 @@ class TestRoutesManager:
     def test_unknown_route_returns_404(self):
         mgr = RoutesManager()
         chain = mgr.get_chain("nonexistent")
-        # 应该返回 unknown_cmd chain，不报错
         assert chain.main_route is not None
 
     def test_before_middleware_order(self):
@@ -80,22 +92,11 @@ class TestRoutesManager:
         def get_user(): return "user"
         mgr.add_route(self._make_route("user.<int:id>", get_user))
 
-        chain = mgr.get_chain("user.abc")  # 不匹配 int
-        # 应该返回 unknown
+        chain = mgr.get_chain("user.abc")
         assert chain.main_route is not mgr.get_chain("user.1").main_route
 
 
 # ── Chain.__call__ ────────────────────────────────────────────────────────────
-
-def _make_ctx(cmd="test"):
-    ctx = _Context()
-    ctx.short["payload"] = RequestPayload(cmd=cmd, body={})
-    return ctx
-
-
-def _make_simple_route(cmd, handler, type_=RouteTypes.ROUTE):
-    return Route(cmd, handler, type_)
-
 
 class TestChain:
     @pytest.mark.asyncio
@@ -107,7 +108,7 @@ class TestChain:
 
         ctx = _make_ctx()
         res = await chain(ctx)
-        assert res.body == {"data": "ok"}
+        assert res.body == msgpack.packb("ok")
 
     @pytest.mark.asyncio
     async def test_before_can_short_circuit(self):
@@ -118,7 +119,7 @@ class TestChain:
             return "ok"
 
         async def before_handler():
-            return "blocked"  # 返回非 None → 短路
+            return "blocked"
 
         main_route = _make_simple_route("test", main_handler)
         before_route = _make_simple_route("test", before_handler, RouteTypes.BEFORE_ROUTE)
@@ -126,8 +127,8 @@ class TestChain:
 
         ctx = _make_ctx()
         res = await chain(ctx)
-        assert "main" not in called  # main 没被调用
-        assert res.body == {"data": "blocked"}
+        assert "main" not in called
+        assert res.body == msgpack.packb("blocked")
 
     @pytest.mark.asyncio
     async def test_before_none_continues_to_main(self):
@@ -135,7 +136,7 @@ class TestChain:
             return "ok"
 
         async def before_handler():
-            return None  # None → 不短路
+            return None
 
         main_route = _make_simple_route("test", main_handler)
         before_route = _make_simple_route("test", before_handler, RouteTypes.BEFORE_ROUTE)
@@ -143,7 +144,7 @@ class TestChain:
 
         ctx = _make_ctx()
         res = await chain(ctx)
-        assert res.body == {"data": "ok"}
+        assert res.body == msgpack.packb("ok")
 
     @pytest.mark.asyncio
     async def test_after_can_override_response(self):
@@ -159,7 +160,7 @@ class TestChain:
 
         ctx = _make_ctx()
         res = await chain(ctx)
-        assert res.body == {"data": "overridden"}
+        assert res.body == msgpack.packb("overridden")
 
     @pytest.mark.asyncio
     async def test_after_none_keeps_previous(self):
@@ -175,7 +176,7 @@ class TestChain:
 
         ctx = _make_ctx()
         res = await chain(ctx)
-        assert res.body == {"data": "original"}
+        assert res.body == msgpack.packb("original")
 
     @pytest.mark.asyncio
     async def test_full_before_main_after_pipeline(self):
@@ -209,7 +210,6 @@ class TestChain:
 
     @pytest.mark.asyncio
     async def test_route_params_injected_into_context(self):
-        """通配符路由的参数应该注入到 context.short"""
         async def main_handler():
             return "ok"
 
@@ -218,16 +218,15 @@ class TestChain:
 
         ctx = _make_ctx("user.42")
         await chain(ctx)
-        # param 应该在 context.short 中
         assert ctx.short.get("id") == "42"
 
 
 # ── Route.__call__ ─────────────────────────────────────────────────────────────
 
-def _make_ctx_with_socket(cmd="test"):
-    """带 socket mock 的 context，用于 Route.__call__（需要 payload 在 long 里）"""
-    ctx = _Context()
-    ctx.short["payload"] = RequestPayload(cmd=cmd, body={})
+def _make_ctx_with_socket(cmd="test", body=b""):
+    supplier = Supplier.default()
+    ctx = _Context(__supplier__=supplier)
+    ctx.short["__message__"] = RequestMessage(cmd=cmd, body=body)
     return ctx
 
 
@@ -239,7 +238,7 @@ class TestRouteCall:
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
         res = await route(ctx)
-        assert res.body == {"data": "hello"}
+        assert res.body == msgpack.packb("hello")
 
     @pytest.mark.asyncio
     async def test_async_handler_returns_value(self):
@@ -248,7 +247,7 @@ class TestRouteCall:
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
         res = await route(ctx)
-        assert res.body == {"key": "val"}
+        assert msgpack.unpackb(res.body) == {"key": "val"}
 
     @pytest.mark.asyncio
     async def test_handler_returns_tuple_with_status(self):
@@ -266,7 +265,7 @@ class TestRouteCall:
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
         res = await route(ctx)
-        assert res.body == {"a": 1}
+        assert msgpack.unpackb(res.body) == {"a": 1}
 
     @pytest.mark.asyncio
     async def test_handler_returns_none_gives_204(self):
@@ -278,13 +277,13 @@ class TestRouteCall:
         assert res.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_handler_returns_none_before_gives_none_response(self):
+    async def test_handler_returns_none_before_gives_none(self):
         def handler():
             return None
         route = Route("test", handler, RouteTypes.BEFORE_ROUTE)
         ctx = _make_ctx_with_socket()
         res = await route(ctx)
-        assert isinstance(res, NoneResponse)
+        assert res is None
 
     @pytest.mark.asyncio
     async def test_abort_code_in_handler(self):
@@ -322,13 +321,12 @@ class TestRouteCall:
             return "ok"
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        # body 为空，Strict 校验会失败
         res = await route(ctx)
         assert res.status_code == 400
 
     @pytest.mark.asyncio
     async def test_injection_error_gives_500(self):
-        def handler(unknown_param: int):  # 没有默认值，ctx 里也没有
+        def handler(unknown_param: int):
             return "ok"
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
@@ -342,7 +340,6 @@ class TestBlueprint:
     def test_route_decorator(self):
         mgr = RoutesManager()
 
-        # 模拟 Blueprint.route 装饰器
         def route(cmds):
             def decorator(handler):
                 route_obj = Route(cmds, handler, RouteTypes.ROUTE)
@@ -358,7 +355,6 @@ class TestBlueprint:
         assert chain.main_route.handler is hello
 
     def test_route_list_cmds(self):
-        """一个路由函数注册多个 cmd"""
         mgr = RoutesManager()
 
         def route(cmds):
@@ -377,7 +373,6 @@ class TestBlueprint:
             assert chain.main_route.handler is greet
 
     def test_before_and_after_on_same_cmd(self):
-        """同一 cmd 注册 before + route + after"""
         mgr = RoutesManager()
         order = []
 
@@ -395,7 +390,6 @@ class TestBlueprint:
         assert chain.main_route is not None
 
     def test_global_before_with_wildcard(self):
-        """before("*") 应该匹配所有 cmd"""
         mgr = RoutesManager()
 
         def global_before():
@@ -408,7 +402,6 @@ class TestBlueprint:
         assert len(chain.before) == 1
 
     def test_dynamic_before_before_static_route(self):
-        """通配符 before 应该作用于匹配的静态路由"""
         mgr = RoutesManager()
 
         mgr.add_route(Route("user.<int:id>", lambda: "user", RouteTypes.ROUTE))

@@ -4,28 +4,14 @@ import struct
 from .request_dq import RequestDequeManager
 from typing import Any, Protocol
 from .exceptions import ExitSignal
-from dataclasses import dataclass
 import io
-
-@dataclass
-class RequestMessage:
-    cmd: str
-    body: bytes
-
-@dataclass
-class ResponseMessage:
-    status_code : int
-    body: bytes
-
-class _UnificationMessage:
-    def __init__(self, message_: ResponseMessage | RequestMessage):
-        self.header = (message_.cmd if isinstance(message_, RequestMessage) else str(message_.status_code)).encode()
-        self.body = message_.body
+from .msg import RequestMessage, ResponseMessage, _UnificationMessage
+from .request import make_requests
 
 class Socket(Protocol):
     """实际向外开放的类"""
     # 实际接收由路由处理
-    async def request(self, cmd: str , body: Any) -> RequestPayload: ...
+    async def request(self, cmd: str , body: Any) -> ResponseMessage: ...
 
 class BaseSocket:
     def __init__(
@@ -162,6 +148,6 @@ class _Socket(BaseSocket):
     async def response(self, response_message: ResponseMessage):
         await self._send_message(response_message)
 
-    async def request(self, request_message: RequestMessage) -> ResponseMessage:
+    async def request(self, cmd: str, ) -> ResponseMessage:
         await self._send_message(request_message)
         return await self.req_dq_mg.enqueue()

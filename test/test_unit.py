@@ -6,7 +6,7 @@ import msgpack
 from src.fastTCP.route.match import is_match_cmd, to_pat
 from src.fastTCP.route.route import Route, RouteTypes
 from src.fastTCP.route.blueprint import RoutesManager
-from src.fastTCP.response import make_response, abort_code, abort_args, NoneResponse
+from src.fastTCP.response import make_response, abort_code, abort_args
 from src.fastTCP.socket_ import RequestMessage, ResponseMessage, _Socket
 from src.fastTCP.context import _Context, Context
 from src.fastTCP.request_dq import RequestDequeManager

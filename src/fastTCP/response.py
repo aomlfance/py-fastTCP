@@ -2,7 +2,7 @@
 fastCTP继用了HTTP状态码, 来表达服务器的响应状态
 """
 from typing import Any, NoReturn
-from .socket_ import ResponseMessage
+from .msg import ResponseMessage
 from .http_status import HTTP_STATUS
 from .exceptions import Abort
 import logging

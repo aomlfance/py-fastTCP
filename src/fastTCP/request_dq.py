@@ -4,7 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
-    from .socket_ import RequestMessage, ResponseMessage
+    from .msg import ResponseMessage
 
 @final
 class RequestDequeManager:

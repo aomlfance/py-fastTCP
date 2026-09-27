@@ -14,7 +14,7 @@ async def main():
 
     await cli.connect()
 
-    res = await cli.request("hey", "nihao!")
+    res = await cli.request()
     print(res)
 
 asyncio.run(main())

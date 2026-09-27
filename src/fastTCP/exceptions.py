@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .response import ResponseMessage
+    from .msg import RequestMessage
 
 class ExitSignal(Exception):
     """退出信号, 致命性"""

@@ -1,13 +1,12 @@
 import pydantic
 from typing import Any
+from .msg import RequestMessage
+import msgpack
 
-def make_requests(cmd: str, body: Any) -> RequestPayload:
-    if isinstance(body, RequestPayload):
-        return body
-
+def make_requests(cmd: str, body: Any):
     if isinstance(body, pydantic.BaseModel):
         body = body.model_dump()
-    elif not isinstance(body, dict):
-        body = {"data": body}
-
-    return RequestPayload(cmd=cmd, body=body)
+    if isinstance(body, str | int | float | bytes | dict | tuple | list):
+        return RequestMessage(cmd, msgpack.packb(body))
+    else:
+        raise TypeError("不支持的类型")

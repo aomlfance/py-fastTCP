@@ -11,7 +11,7 @@ import logging
 import pydantic
 
 from .match import is_match_cmd, to_pat
-from ..response import default_response, make_response, NoneResponse
+from ..response import default_response, make_response
 from ..injection import inject
 from ..utils import Async
 from ..exceptions import Abort, ExitSignal
@@ -63,7 +63,7 @@ class Route:
 
         try:
             try:
-                injection_kwargs = inject(ctx, self)
+                injection_kwargs = await inject(ctx, self)
             except TypeError as e:
                 logger.error(f"{type(e)} - {e}")
                 return default_response(500)
