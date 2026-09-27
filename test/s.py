@@ -6,15 +6,9 @@ logging.basicConfig(level=0)
 
 async def main():
     cli = ClientFastTCP()
-
-    @cli.route("hey")
-    def hey():
-        print("被访问")
-        return "hey"
-
     await cli.connect()
 
-    res = await cli.request()
+    res = await cli.request("hey","FastTCP")
     print(res)
 
 asyncio.run(main())

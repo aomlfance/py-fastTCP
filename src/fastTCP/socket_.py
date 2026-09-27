@@ -148,6 +148,6 @@ class _Socket(BaseSocket):
     async def response(self, response_message: ResponseMessage):
         await self._send_message(response_message)
 
-    async def request(self, cmd: str, ) -> ResponseMessage:
-        await self._send_message(request_message)
+    async def request(self, cmd: str, body: Any) -> ResponseMessage:
+        await self._send_message(make_requests(cmd, body))
         return await self.req_dq_mg.enqueue()
