@@ -8,10 +8,6 @@ from .exceptions import Abort
 import logging
 import msgpack
 
-class NoneResponse:
-    def __bool__(self):
-        return False
-
 logger = logging.getLogger(__name__)
 
 def make_response(
@@ -22,9 +18,6 @@ def make_response(
     用来将路由函数传来的值转为ResponseMessage
     """
     if isinstance(res, ResponseMessage):
-        return res
-
-    if isinstance(res, NoneResponse):
         return res
 
     if not isinstance(res, tuple):

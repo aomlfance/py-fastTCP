@@ -32,8 +32,6 @@ class _Context:
         self.short: dict[str, Any] = {}
 
     def get(self, key: str, default: Any = None) -> Any:
-        if key == "__context__":
-            return self
         for m in (self.long, self.short):
             if key in m: return m[key]
         else:
@@ -52,8 +50,6 @@ class _Context:
         :param item: keys to check
         :return: bool
         """
-        if item == "__context__":
-            return True
         return item in self.long or item in self.short
 
     async def refresh(self):
