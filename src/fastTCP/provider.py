@@ -1,5 +1,6 @@
 from typing import Callable
 
+from .context import Context
 from .msg import RequestMessage
 from .route import Route, RouteTypes
 from .socket_ import Socket
@@ -16,6 +17,9 @@ def _get_socket(__socket__):
 
 def _get_message(__message__):
     return __message__
+
+def _get_context(__context__):
+    return __context__
 
 class Supplier:
     def __init__(self):
@@ -36,5 +40,6 @@ class Supplier:
     def default(cls):
         obj = cls()
         obj.provide(Socket)(_get_socket)
+        obj.provide(Context)(_get_context)
         obj.provide(RequestMessage)(_get_message)
         return obj

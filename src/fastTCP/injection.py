@@ -8,16 +8,15 @@ if TYPE_CHECKING:
 
 import inspect
 from .context import Context
-from .utils import name
 import logging
 
 logger = logging.getLogger(__name__)
 
-async def inject_one(param: inspect.Parameter, ctx: Context, route: Route):
+
+
+async def inject_one(param: inspect.Parameter, ctx: Context):
     # --先查参数名--
-    if param.annotation == Context:
-        return ctx
-    elif param.name in ctx:
+    if param.name in ctx:
         return ctx[param.name]
 
     if provider := ctx["__supplier__"].query(param.name):
@@ -39,19 +38,15 @@ async def inject_one(param: inspect.Parameter, ctx: Context, route: Route):
         return param.annotation(**ctx["__load__"])
 
     raise TypeError(
-        f"{name(route.handler)} 缺少参数{param.name}"
+        f"缺少参数{param.name}"
         "包括fastTCP不推荐带默认值的写法"
         "如果要鉴权, 应该在注入函数中短路."
     )
 
 async def inject(ctx: Context, route: Route):
-    """
-    根据路由函数的签名, 选择要注入的参数
-    :raise TypeError, pydantic.ValidationError:
-    """
     kwargs = {}
 
     for param in inspect.signature(route).parameters.values():
-        kwargs[param.name] = await inject_one(param, ctx, route)
+        kwargs[param.name] = await inject_one(param, ctx)
 
     return kwargs

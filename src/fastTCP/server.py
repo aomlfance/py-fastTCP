@@ -11,6 +11,11 @@ from .provider import Supplier
 
 logger = logging.getLogger(__name__)
 
+def _get_get_context_by_server_func(server: "FastTCPServer"):
+    def _get_context_by_server(__socket__: _Socket):
+        return server.clients[__socket__.address]
+    return _get_context_by_server
+
 class FastTCPServer(Blueprint): # ReqDqMg
     def __init__(
             self,
@@ -30,6 +35,8 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
         self.disconnect_handler: Callable | None = None
         self.disconnect_handler_inj: bool = False
+
+        self.provide("__context__")(_get_get_context_by_server_func(self))
 
         self.timeout = timeout
 

@@ -2,12 +2,17 @@ from typing import Any
 
 from .provider import Supplier
 from .route import Blueprint
-from .context import _Context
+from .context import _Context, Context
 from .socket_ import _Socket
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _get_context_by_client(
+        __socket__: "ClientFastTCP" # __socket__已经存在在上下文中, ClientFastTCP仅表明类型
+):
+    return __socket__.context
 
 class ClientFastTCP(Blueprint, _Socket):
     def __init__(
@@ -28,6 +33,9 @@ class ClientFastTCP(Blueprint, _Socket):
         _Socket.__init__(self, *(await asyncio.open_connection(self.host, self.port)))
 
         self.context.long["__socket__"] = self
+
+        self.supplier.provide("__context__")(_get_context_by_client)
+        # 不直接将上下文存在上下文是因为当清理上下文会嵌套close, 而且会嵌套字典
 
         asyncio.create_task(self._recv_loop())
 

@@ -85,6 +85,7 @@ class Route:
         else:
             result = make_response(result)
 
+        ctx.short["__response__"] = result
         return result
 
 def UNKNOWN_CMD():

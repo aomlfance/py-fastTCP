@@ -39,7 +39,6 @@ class Chain:
         last_res = res
 
         for after_route in self.after:
-            context.short["response"] = res
             res = await after_route(context)
 
             if res is None:
