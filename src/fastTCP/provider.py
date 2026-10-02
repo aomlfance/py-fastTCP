@@ -12,14 +12,11 @@ class Provider(Route):
         self.type = RouteTypes.PROVIDER
         self._sig = None
 
-def _get_socket(__socket__):
-    return __socket__
+def _get_socket(__socket__): return __socket__
 
-def _get_message(__message__):
-    return __message__
+def _get_message(__message__): return __message__
 
-def _get_context(__context__):
-    return __context__
+def _get_context(__context__): return __context__
 
 class Supplier:
     def __init__(self):
@@ -38,6 +35,7 @@ class Supplier:
 
     @classmethod
     def default(cls):
+        """默认实现由Socket, context, message类型提示 -> 魔法键"""
         obj = cls()
         obj.provide(Socket)(_get_socket)
         obj.provide(Context)(_get_context)

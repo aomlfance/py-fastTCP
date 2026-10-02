@@ -6,8 +6,9 @@ import inspect
 import asyncio
 import logging
 from .route import Blueprint
-from .utils import Async, cannot_close
+from .utils import Async
 from .provider import Supplier
+from .handler import process_msg
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
         try:
             while True:
-                await self.main_handler(ctx)
+                await process_msg(self, ctx, socket, logger)
         except (ExitSignal, ConnectionResetError, BrokenPipeError)  as e:
             logger.info(f"客户端退出 - {e}")
 
@@ -78,26 +79,8 @@ class FastTCPServer(Blueprint): # ReqDqMg
 
             await Async(self.disconnect_handler)(*args)
 
-    async def main_handler(self, ctx : _Context):
-        await ctx.refresh()
-
-        socket: _Socket = ctx["__socket__"]
-
-        message = await socket.receive()
-
-        ctx.short["__message__"] = message
-
-        res = await self.get_chain(message.cmd)(ctx)
-
-        await socket.response(res)
-        logger.info(f"{message.cmd} - {res.status_code}")
-
     async def serve_forever(self):
         server = await self.server_task
 
         async with server:
             await server.serve_forever()
-
-    def suspend(self):
-        task = asyncio.create_task(self.serve_forever())
-        return task

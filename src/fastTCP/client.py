@@ -1,9 +1,8 @@
-from typing import Any
-
 from .provider import Supplier
 from .route import Blueprint
-from .context import _Context, Context
+from .context import _Context
 from .socket_ import _Socket
+from .handler import process_msg, log
 import asyncio
 import logging
 
@@ -42,20 +41,5 @@ class ClientFastTCP(Blueprint, _Socket):
         logger.info(f"连接到 {self.address}")
 
     async def _recv_loop(self):
-        while True:
-            if self.writer.is_closing():
-                break
-
-            await self.context.refresh()
-
-            message = await self.receive()
-
-            self.context.short["__message__"] = message
-
-            try:
-                res = await self.get_chain(message.cmd)(self.context)
-            except:
-                raise
-            else:
-                await self.response(res)
-                logger.info(f"{message.cmd} - {res.status_code}")
+        while not self.writer.is_closing():
+            await process_msg(self, self.context, self, logger)

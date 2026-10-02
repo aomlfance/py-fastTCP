@@ -1,9 +1,11 @@
-import asyncio
-from src.fastTCP import FastTCPServer
-app = FastTCPServer()
+from fastTCP._unification_socket import Maintenance
 
-@app.route("hey")
-def hey(name: str):
-    return f"hey {name}"
+app = Maintenance()
 
-asyncio.run(app.serve_forever())
+@app.route("hello")
+def hello():
+    return "Hello World"
+
+from asyncio import run
+
+run(app.serve_forever("127.0.0.1", 8000))

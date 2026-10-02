@@ -32,8 +32,8 @@ async def _run_test(server, test_fn, *args, **kwargs):
         return await test_fn(server, *args, **kwargs)
     finally:
         # 先关闭所有客户端连接，让 handle_client 协程退出
-        for addr in list(server.clients.keys()):
-            ctx = server.clients.get(addr)
+        for addr in list(server.conns.keys()):
+            ctx = server.conns.get(addr)
             if ctx:
                 socket = ctx.get("socket")
                 if socket:
@@ -41,7 +41,7 @@ async def _run_test(server, test_fn, *args, **kwargs):
                         await socket.close()
                     except Exception:
                         pass
-        server.clients.clear()
+        server.conns.clear()
         task.cancel()
         try:
             await asyncio.wait_for(task, timeout=2)

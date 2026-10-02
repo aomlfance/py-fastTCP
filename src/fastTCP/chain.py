@@ -3,8 +3,10 @@ from warnings import warn
 
 if TYPE_CHECKING:
     from .route import Route
-    from .context import Context
+    from .context import _Context
     from .msg import ResponseMessage
+    from .provider import Supplier
+    from .msg import RequestMessage
 
 from .response import make_response, default_response
 
@@ -21,25 +23,25 @@ class Chain:
         self.after = after
         self.param = param or {}
 
-    async def __call__(self, context: Context) -> ResponseMessage:
+    async def __call__(self, context: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage:
         context.short.update(self.param)
 
         for before_route in self.before:
-            res = await before_route(context)
+            res = await before_route(context, supplier, message)
 
             if res is not None: break
         else:
-            res = await self.main_route(context)
+            res = await self.main_route(context, supplier, message)
 
             if res is None:
-                warn(f"{context["__message__"].cmd}主路由没有返回响应")
+                warn(f"{message.cmd}主路由没有返回响应")
                 res = default_response(204)
 
         res = make_response(res)
         last_res = res
 
         for after_route in self.after:
-            res = await after_route(context)
+            res = await after_route(context, supplier, message)
 
             if res is None:
                 res = last_res

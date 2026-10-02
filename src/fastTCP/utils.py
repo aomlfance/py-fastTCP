@@ -1,6 +1,7 @@
 from typing import Any, Callable
 import inspect
 import asyncio
+from warnings import warn
 
 class Async:
     def __init__(self, func: Callable):
@@ -43,3 +44,14 @@ def name(obj: Any) -> str:
 
 def short_name(obj: Any):
     return repr(obj) if len(repr(obj)) < 12 else repr(obj)[:12]
+
+async def _clear(obj: dict):
+    for n, o in obj.items():
+        if not hasattr(o, "close") or not callable(o.close):
+            continue
+        try:
+            await Async(o.close)()
+        except (OSError, IOError, BrokenPipeError, ConnectionResetError) as e:
+            warn(f"在释放 {n} 错误: {e}")
+
+    obj.clear()

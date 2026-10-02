@@ -1,14 +1,15 @@
 from typing import Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..context import Context
+    from ..context import _Context
     from ..response import ResponseMessage
+    from ..provider import Supplier
+    from ..msg import RequestMessage
 
 from enum import Enum
 from re import Pattern
 import inspect
 import logging
-import pydantic
 
 from .match import is_match_cmd, to_pat
 from ..response import default_response, make_response
@@ -55,27 +56,21 @@ class Route:
             self._sig = inspect.signature(self.handler)
         return self._sig
 
-    async def __call__(self, ctx: Context) -> ResponseMessage | None:
+    async def __call__(self, ctx: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage | None:
         """
         :return: 倘若route.type为RouteTypes.ROUTE必定返回ResponsePayload
         """
         result = None
 
         try:
-            try:
-                injection_kwargs = await inject(ctx, self)
-            except TypeError as e:
-                logger.error(f"{type(e)} - {e}")
-                return default_response(500)
-            except pydantic.ValidationError as e:
-                return default_response(400)
+            injection_kwargs = await inject(ctx, self, supplier, message)
 
             result = await Async(self.handler)(**injection_kwargs)
         except Abort as e:
             result = e.response
         except ExitSignal:
             raise
-        except BaseException as e:
+        except Exception as e:
             logger.error(f"{type(e)} - {e}")
             result = default_response(500)
 
