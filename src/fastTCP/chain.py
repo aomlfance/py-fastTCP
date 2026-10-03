@@ -25,6 +25,7 @@ class Chain:
 
     async def __call__(self, context: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage:
         context.short.update(self.param)
+        context.short["__message__"] = message
 
         for before_route in self.before:
             res = await before_route(context, supplier, message)
@@ -32,10 +33,6 @@ class Chain:
             if res is not None: break
         else:
             res = await self.main_route(context, supplier, message)
-
-            if res is None:
-                warn(f"{message.cmd}主路由没有返回响应")
-                res = default_response(204)
 
         res = make_response(res)
         last_res = res

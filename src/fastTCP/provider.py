@@ -1,16 +1,9 @@
-from typing import Callable
+from typing import Callable, Any
 
 from .context import Context
 from .msg import RequestMessage
-from .route import Route, RouteTypes
 from .socket_ import Socket
-
-class Provider(Route):
-    def __init__(self, sell: type | str, handler: Callable):
-        self.sell = sell
-        self.handler = handler
-        self.type = RouteTypes.PROVIDER
-        self._sig = None
+from .utils import TempSignature
 
 def _get_socket(__socket__): return __socket__
 
@@ -20,18 +13,30 @@ def _get_context(__context__): return __context__
 
 class Supplier:
     def __init__(self):
-        self._store: dict[type | str, Provider] = {}
+        self._store: dict[type | str, Callable] = {}
+        self.matchings: list[tuple[Callable[..., bool], Callable]] = []
 
     def provide(self, sell: type | str):
         def decorator(handler):
-            p = Provider(sell, handler)
-            self._store[p.sell] = p
+            self._store[sell] = TempSignature(handler)
             return handler
-
         return decorator
 
-    def query(self, name_or_type: type | str) -> Provider | None:
-        return self._store.get(name_or_type)
+    def match(self, the_inspector: Callable[..., bool]):
+        def decorator(handler):
+            self.matchings.append((the_inspector, TempSignature(handler)))
+            return handler
+        return decorator
+
+    def query(self, name_or_type: Any) -> Callable | None:
+        if (r1 := self._store.get(name_or_type)) is None:
+            for i, t in self.matchings:
+                if i(name_or_type):
+                    return t
+            else:
+                return None
+        else:
+            return r1
 
     @classmethod
     def default(cls):

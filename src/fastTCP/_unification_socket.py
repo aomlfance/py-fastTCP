@@ -22,8 +22,6 @@ async def _main_loop(bp: Blueprint, ctx: _Context, socket: _Socket, supplier: Su
             await process_msg(bp, ctx, socket, logger, supplier)
     except (ExitSignal, ConnectionResetError, BrokenPipeError) as e:
         logger.info("服务器退出")
-self._add_a_conn(r, w)
-
 
 class Maintenance(Blueprint):
     # 在这里需要理解socket的本质

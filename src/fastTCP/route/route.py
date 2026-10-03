@@ -1,4 +1,4 @@
-from typing import Callable, TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING, Protocol, Any
 
 if TYPE_CHECKING:
     from ..context import _Context
@@ -8,23 +8,19 @@ if TYPE_CHECKING:
 
 from enum import Enum
 from re import Pattern
-import inspect
 import logging
 
 from .match import is_match_cmd, to_pat
 from ..response import default_response, make_response
-from ..injection import inject
-from ..utils import Async
-from ..exceptions import Abort, ExitSignal
+from ..utils import TempSignature
+from ..injection import call_like_route
 
 logger = logging.getLogger(__name__)
-
 
 class RouteTypes(Enum):
     BEFORE_ROUTE = "before-route"
     ROUTE = "route"
     AFTER_ROUTE = "after-route"
-    PROVIDER = "provider"
 
 class Route:
     def __init__(
@@ -32,9 +28,10 @@ class Route:
             cmds: list[str] | str ,
             handler: Callable,
             type_: RouteTypes,
-            echo_log: bool = True
     ):
-        _cmds =  cmds if isinstance(cmds, list) else [cmds]
+        self.handler = TempSignature(handler)
+
+        _cmds = cmds if (isinstance(cmds, list)) else [cmds]
 
         self.cmds: list[Pattern | str] = []
 
@@ -44,32 +41,16 @@ class Route:
             else:
                 self.cmds.append(to_pat(cmd))
 
-        self.handler = handler
         self.type = type_
-        self.echo_log = echo_log
 
-        self._sig = None
-
-    @property
-    def __signature__(self):
-        if self._sig is None:
-            self._sig = inspect.signature(self.handler)
-        return self._sig
-
-    async def __call__(self, ctx: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage | None:
+    async def __call__(self, ctx: _Context, supplier: Supplier) -> ResponseMessage | None:
         """
         :return: 倘若route.type为RouteTypes.ROUTE必定返回ResponsePayload
         """
         result = None
 
         try:
-            injection_kwargs = await inject(ctx, self, supplier, message)
-
-            result = await Async(self.handler)(**injection_kwargs)
-        except Abort as e:
-            result = e.response
-        except ExitSignal:
-            raise
+            await call_like_route(self.handler, ctx, supplier)
         except Exception as e:
             logger.error(f"{type(e)} - {e}")
             result = default_response(500)
