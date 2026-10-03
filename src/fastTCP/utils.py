@@ -14,7 +14,7 @@ async def _clear(obj: dict):
         if hasattr(o, "aclose") and callable(o.aclose):
             handler = o.aclose
         elif hasattr(o, "close") and callable(o.close):
-            handler = Async(o.aclose, "clogging")
+            handler = Async(o.close, "clogging")
         else:
             continue
         try:
