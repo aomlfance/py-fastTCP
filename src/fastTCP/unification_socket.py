@@ -1,6 +1,3 @@
-from typing import Literal
-
-from .socket_ import Socket
 from .context import _Context
 from .msg import ResponseMessage
 from .socket_ import _Socket
@@ -49,7 +46,7 @@ class Maintenance(Blueprint):
             return next(iter(self.conns.values()))
 
     async def request(self, *args, **kwargs) -> ResponseMessage:
-        return await self._unique_client.socket.request(*args, *kwargs)
+        return await self._unique_client["__socket__"].request(*args, *kwargs)
 
     async def _main_handler(self, ctx: _Context, socket: _Socket):
         await _main_loop(self, ctx, socket, self.supplier)
@@ -71,8 +68,8 @@ class Maintenance(Blueprint):
 
         return ctx, socket
 
-    async def _uninstall_conn(self, o : _Socket | _Context):
-        await (o if isinstance(o, _Socket) else o.socket).close()
+    async def _uninstall_conn(self, o : _Socket):
+        await o.close()
 
         self.conns.pop(o.address, None)
 

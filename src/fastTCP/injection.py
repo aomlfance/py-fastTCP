@@ -33,7 +33,7 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     # 注入需要什么吗
     # 1.是先查上下文
     # 2.是在是否要提供同名提供者
-    # 3.类型判断--对消息体检验(这一部分我看看能不能通过自定义规则强调)
+    # 3.类型判断
     # --先查参数名--
     if param.name in ctx:
         return ctx[param.name]

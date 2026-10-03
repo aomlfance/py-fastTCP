@@ -8,15 +8,15 @@ from .socket_ import Socket
 from .utils import TempSignature
 from .injection import call_like_route
 
-def _get_socket(__socket__): return __socket__
+async def _get_socket(__socket__): return __socket__
 
-def _get_message(__message__): return __message__
+async def _get_message(__message__): return __message__
 
-def _get_context(__context__): return __context__
+async def _get_context(__context__): return __context__
 
-def _get_response(__response__): return __response__
+async def _get_response(__response__): return __response__
 
-def _load(ctx: Context, message: RequestMessage):
+async def _load(ctx: Context, message: RequestMessage):
     if "__load__" in ctx:
         return ctx["__load__"]
 
@@ -24,13 +24,13 @@ def _load(ctx: Context, message: RequestMessage):
 
     return ctx.short["__load__"]
 
-def _return_annotation(__annotation__):
+async def _return_annotation(__annotation__):
     return __annotation__
 
-def _can_inject_msg(annotation, __load__):
-    return issubclass(annotation, type) and (isinstance(__load__, annotation) or issubclass(annotation, pydantic.BaseModel))
+async def _can_inject_msg(annotation, __load__):
+    return isinstance(annotation, type) and (isinstance(__load__, annotation) or issubclass(annotation, pydantic.BaseModel))
 
-def _inject_msg(annotation, __load__):
+async def _inject_msg(annotation, __load__):
     if isinstance(__load__, annotation):
         return __load__
     else:
@@ -56,15 +56,20 @@ class Supplier:
     async def query(self, name_or_type: Any, ctx: _Context) -> Callable | None:
         if (r1 := self._store.get(name_or_type)) is None:
             match_chain: list = ctx["__match_chain__"]
+
             for i, t in self.matchings:
+
                 if i in match_chain:
                     continue
+
                 match_chain.append(i)
+
                 try:
                     if await call_like_route(i, ctx, self):
                         return t
                 finally:
                     del match_chain[-1]
+
             else:
                 return None
         else:
