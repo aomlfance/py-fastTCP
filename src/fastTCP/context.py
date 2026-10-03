@@ -52,7 +52,3 @@ class _Context:
     async def close(self):
         await self.refresh()
         await _clear(self.long)
-
-    def __getattr__(self, item: Literal["message", "load", "response", "socket"]):
-        return self[f"__{item}__"]
-

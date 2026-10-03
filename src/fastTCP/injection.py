@@ -38,11 +38,22 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     if param.name in ctx:
         return ctx[param.name]
 
-    if provider := supplier.query(param.name):
+    ctx.short["__annotation__"] = param.annotation
+    stored = "__match_chain__" in ctx
+
+    if not stored:
+        ctx.short["__match_chain__"] = []
+
+    if provider := await supplier.query(param.name, ctx):
         return await call_like_route(provider, ctx, supplier)
 
-    if provider := supplier.query(param.annotation):
+    if provider := await supplier.query(param.annotation, ctx):
         return await call_like_route(provider, ctx, supplier)
+
+    ctx.short.pop("__annotation__", None)
+
+    if not stored:
+        ctx.short.pop("__match_chain__", None)
 
     raise TypeError(
         f"缺少参数{param.name}"

@@ -50,7 +50,7 @@ class Route:
         result = None
 
         try:
-            await call_like_route(self.handler, ctx, supplier)
+            result = await call_like_route(self.handler, ctx, supplier)
         except Exception as e:
             logger.error(f"{type(e)} - {e}")
             result = default_response(500)

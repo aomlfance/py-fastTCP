@@ -1,14 +1,13 @@
-from src.fastTCP.client import ClientFastTCP
-import asyncio
-import logging
+from fastTCP.unification_socket import Maintenance
+from asyncio import run
 
-logging.basicConfig(level=0)
+app = Maintenance()
 
 async def main():
-    cli = ClientFastTCP()
-    await cli.connect()
+    await app.connect('127.0.0.1', 8000)
 
-    res = await cli.request("hey","FastTCP")
+    res = await app.request("hello", "FastTCP")
+
     print(res)
 
-asyncio.run(main())
+run(main())

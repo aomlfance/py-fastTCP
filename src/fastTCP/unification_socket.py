@@ -1,8 +1,7 @@
-from typing import TYPE_CHECKING
+from typing import Literal
 
-if TYPE_CHECKING:
-    from .context import _Context
-
+from .socket_ import Socket
+from .context import _Context
 from .msg import ResponseMessage
 from .socket_ import _Socket
 from .exceptions import ExitSignal
@@ -33,7 +32,11 @@ class Maintenance(Blueprint):
         super().__init__()
 
         self.conns: dict[tuple, _Context] = {}
-        self.supplier = Supplier()
+        self.supplier = Supplier.default()
+        self.supplier.provide("__context__")(self._get_context)
+
+    def _get_context(self, __socket__: _Socket):
+        return self.conns[__socket__.address]
 
     def provide(self, *args, **kwargs):
         return self.supplier.provide(*args, **kwargs)
@@ -45,21 +48,21 @@ class Maintenance(Blueprint):
         else:
             return next(iter(self.conns.values()))
 
-    def request(self, *args, **kwargs) -> ResponseMessage:
-        return self._unique_client.socket.request(*args, *kwargs)
+    async def request(self, *args, **kwargs) -> ResponseMessage:
+        return await self._unique_client.socket.request(*args, *kwargs)
 
     async def _main_handler(self, ctx: _Context, socket: _Socket):
         await _main_loop(self, ctx, socket, self.supplier)
         await self._uninstall_conn(socket)
 
     async def _handle_client(self, r: asyncio.StreamReader, w: asyncio.StreamWriter):
-        await self._main_handler(*self._add_a_conn(r, w))
+        await self._main_handler(*self._add_conn(r, w))
 
     async def serve_forever(self, *args, **kwargs):
         async with (server := await asyncio.start_server(self._handle_client, *args, **kwargs)):
             await server.serve_forever()
 
-    def _add_a_conn(self, r: asyncio.StreamReader, w: asyncio.StreamWriter) -> tuple[_Context, _Socket]:
+    def _add_conn(self, r: asyncio.StreamReader, w: asyncio.StreamWriter) -> tuple[_Context, _Socket]:
         socket = _Socket(r, w)
 
         ctx = _Context(__socket__=socket)
@@ -76,7 +79,7 @@ class Maintenance(Blueprint):
         ...
 
     async def connect(self, *args, **kwargs):
-        ctx, socket = self._add_a_conn(
+        ctx, socket = self._add_conn(
             *(await asyncio.open_connection(*args, **kwargs))
         )
 
@@ -84,8 +87,8 @@ class Maintenance(Blueprint):
 
         return task
 
-    async def async_close(self):
+    async def aclose(self):
         await _clear(self.conns)
 
     def close(self):
-        asyncio.run(self.async_close())
+        asyncio.run(self.aclose())
