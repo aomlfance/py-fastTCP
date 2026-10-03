@@ -15,8 +15,10 @@ async def _clear(obj: dict):
             handler = o.alose
         elif hasattr(o, "close") and callable(o.close):
             handler = Async(o.close, "clogging")
+        else:
+            continue
         try:
-            await Async(o.close)()
+            await handler()
         except (OSError, IOError, BrokenPipeError, ConnectionResetError) as e:
             warn(f"在释放 {n} 错误: {e}")
 
@@ -51,7 +53,7 @@ class Async:
         return inspect.signature(self.handler)
 
     async def __call__(self, *args, **kwargs):
-        if inspect.iscoroutinefunction(self.handler):
+        if inspect.iscoroutinefunction(inspect.unwrap(self.handler)):
             return await self.handler(*args, **kwargs)
         else:
             if self.way == "thread_pool":

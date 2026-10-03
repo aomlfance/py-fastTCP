@@ -149,5 +149,6 @@ class _Socket(BaseSocket):
         await self._send_message(response_message)
 
     async def request(self, cmd: str, body: Any) -> ResponseMessage:
+        fut = self.req_dq_mg.enqueue()
         await self._send_message(make_requests(cmd, body))
-        return await self.req_dq_mg.enqueue()
+        return await fut
