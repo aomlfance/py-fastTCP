@@ -30,7 +30,6 @@ class Maintenance(Blueprint):
 
         self.conns: dict[tuple, _Context] = {}
         self.supplier = Supplier.default()
-        self.supplier.provide("__context__")(self._get_context)
 
     def _get_context(self, __socket__: _Socket):
         return self.conns[__socket__.address]
@@ -62,7 +61,7 @@ class Maintenance(Blueprint):
     def _add_conn(self, r: asyncio.StreamReader, w: asyncio.StreamWriter) -> tuple[_Context, _Socket]:
         socket = _Socket(r, w)
 
-        ctx = _Context(__socket__=socket)
+        ctx = _Context.take_self(__socket__=socket)
 
         self.conns[socket.address] = ctx
 

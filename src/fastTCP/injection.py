@@ -26,8 +26,6 @@ async def call_like_route(handler: Callable, ctx: _Context, supplier: Supplier):
         return await Async(handler)(**injection_kwargs)
     except Abort as e:
         return e.response
-    except ExitSignal:
-        raise
 
 async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier):
     # 注入需要什么吗

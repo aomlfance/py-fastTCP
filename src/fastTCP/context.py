@@ -1,5 +1,7 @@
-from typing import Any, Protocol, Literal
+import asyncio
+from typing import Any, Protocol
 from .utils import _clear
+from .exceptions import ExitSignal
 
 class Context(Protocol):
     """对外api"""
@@ -49,6 +51,35 @@ class _Context:
     async def refresh(self):
         await _clear(self.short)
 
-    async def close(self):
+    async def aclose(self):
         await self.refresh()
+        # 字典并非无序!这里的意思的如果long有NotCloseContext的话, 那他会先被运行, 而且可以读到"__in_clear__"
+        self.long["__in_clearing__"] = True
+
         await _clear(self.long)
+
+    def close(self):
+        asyncio.run(self.aclose())
+
+    @classmethod
+    def take_self(cls, **kwargs):
+        obj = cls(**kwargs)
+
+        not_close_ctx = _NotCloseContext()
+
+        not_close_ctx.long = obj.long
+        not_close_ctx.short = obj.short
+
+        obj.long["__context__"] = not_close_ctx
+
+        return obj
+
+class _NotCloseContext(_Context):
+    def close(self, *args):
+        if self.get("__in_clearing__"):
+            return
+        else:
+            raise ExitSignal(*args)
+
+    async def aclose(self, *args):
+        return self.close(*args)

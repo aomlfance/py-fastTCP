@@ -12,9 +12,9 @@ def short_name(obj: Any):
 async def _clear(obj: dict):
     for n, o in obj.items():
         if hasattr(o, "aclose") and callable(o.aclose):
-            handler = o.alose
+            handler = o.aclose
         elif hasattr(o, "close") and callable(o.close):
-            handler = Async(o.close, "clogging")
+            handler = Async(o.aclose, "clogging")
         else:
             continue
         try:

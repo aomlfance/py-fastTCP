@@ -38,7 +38,7 @@ async def _run_test(server, test_fn, *args, **kwargs):
                 socket = ctx.get("socket")
                 if socket:
                     try:
-                        await socket.close()
+                        await socket.aclose()
                     except Exception:
                         pass
         server.conns.clear()

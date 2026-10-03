@@ -1,10 +1,8 @@
-from typing import Callable, TYPE_CHECKING, Protocol, Any
-
+from typing import Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from ..context import _Context
     from ..response import ResponseMessage
     from ..provider import Supplier
-    from ..msg import RequestMessage
 
 from enum import Enum
 from re import Pattern
@@ -14,6 +12,7 @@ from .match import is_match_cmd, to_pat
 from ..response import default_response, make_response
 from ..utils import TempSignature
 from ..injection import call_like_route
+from ..exceptions import ExitSignal
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +50,8 @@ class Route:
 
         try:
             result = await call_like_route(self.handler, ctx, supplier)
+        except ExitSignal:
+            raise
         except Exception as e:
             logger.error(f"{type(e)} - {e}")
             result = default_response(500)

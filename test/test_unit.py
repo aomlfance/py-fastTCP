@@ -113,7 +113,7 @@ class TestContext:
     @pytest.mark.asyncio
     async def test_close_clears_long(self):
         ctx = _Context(x=1)
-        await ctx.close()
+        await ctx.aclose()
         assert "x" not in ctx.long
 
 

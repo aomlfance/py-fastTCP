@@ -66,7 +66,7 @@ class FastTCPServer(Blueprint): # ReqDqMg
         except (ExitSignal, ConnectionResetError, BrokenPipeError)  as e:
             logger.info(f"客户端退出 - {e}")
 
-        await ctx.close()
+        await ctx.aclose()
 
         self.clients.pop(socket.address, None)
 
