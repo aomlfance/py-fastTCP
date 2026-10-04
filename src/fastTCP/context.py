@@ -53,9 +53,8 @@ class _Context:
 
     async def aclose(self):
         await self.refresh()
-        # 字典并非无序!这里的意思的如果long有NotCloseContext的话, 那他会先被运行, 而且可以读到"__in_clear__"
 
-        self.long["__in_clearing__"] = True
+        self.long["__in_clearing__"] = True # in_end
 
         try:
             await _clear(self.long)

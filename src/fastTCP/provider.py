@@ -1,4 +1,4 @@
-from typing import Callable, Any, TypeAlias
+from typing import Callable, Any
 import msgpack
 import pydantic
 
@@ -47,9 +47,9 @@ class Supplier:
             return handler
         return decorator
 
-    def match(self, the_inspector: Callable[..., bool]):
+    def match(self, the_inspector):
         def decorator(handler):
-            self.matchings.append((the_inspector, TempSignature(handler)))
+            self.matchings.append((TempSignature(the_inspector), TempSignature(handler)))
             return handler
         return decorator
 

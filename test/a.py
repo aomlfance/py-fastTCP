@@ -1,11 +1,13 @@
 from fastTCP.unification_socket import Maintenance
-from fastTCP.context import Context
-
+import os, psutil
 
 app = Maintenance()
 
+p = psutil.Process(os.getpid())
+
 @app.route("hello")
 def hello(name: str):
+    print(f"当前进程内存: {p.memory_info().rss / 1024 / 1024:.1f} MB")
     return f"Hello World {name}"
 
 from asyncio import run

@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Protocol, Any, Callable
 
+from types import TracebackType
+
 if TYPE_CHECKING:
     from provider import Supplier
     from msg import RequestMessage
@@ -27,6 +29,25 @@ async def call_like_route(handler: Callable, ctx: _Context, supplier: Supplier):
     except Abort as e:
         return e.response
 
+class NotCoveredLevel:
+    """作用域内为 ctx 补齐缺失的键; 已存在的键一律不覆盖, 退出时只回收自己写入的键."""
+
+    def __init__(self, father: _Context, *args: tuple[str, Any]):
+        self.context = father
+        self.defaults = dict(args)
+        self.mine: set[str] = set()
+
+    def __enter__(self):
+        for name, value in self.defaults.items():
+            if name not in self.context:
+                self.context.short[name] = value
+                self.mine.add(name)
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None):
+        for name in self.mine:
+            self.context.short.pop(name, None)
+
 async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier):
     # 注入需要什么吗
     # 1.是先查上下文
@@ -36,27 +57,17 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     if param.name in ctx:
         return ctx[param.name]
 
-    ctx.short["__annotation__"] = param.annotation
-    stored = "__match_chain__" in ctx
+    with NotCoveredLevel(ctx, ("__annotation__", param.annotation), ("__match_chain__", [])):
+        if provider := await supplier.query(param.name, ctx):
+            return await call_like_route(provider, ctx, supplier)
 
-    if not stored:
-        ctx.short["__match_chain__"] = []
-
-    if provider := await supplier.query(param.name, ctx):
-        return await call_like_route(provider, ctx, supplier)
-
-    if provider := await supplier.query(param.annotation, ctx):
-        return await call_like_route(provider, ctx, supplier)
-
-    ctx.short.pop("__annotation__", None)
-
-    if not stored:
-        ctx.short.pop("__match_chain__", None)
+        if provider := await supplier.query(param.annotation, ctx):
+            return await call_like_route(provider, ctx, supplier)
 
     raise TypeError(
         f"缺少参数{param.name}"
         "包括fastTCP不推荐带默认值的写法"
-        "如果要鉴权, 应该在注入函数中短路."
+        "如果要鉴权, 应该在注入函数中短路.",
     )
 
 async def inject(ctx: _Context, sig: inspect.Signature, supplier: Supplier):
