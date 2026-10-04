@@ -61,9 +61,6 @@ class _Context:
         finally:
             self.long.pop("__in_clearing__", None)
 
-    def close(self):
-        asyncio.run(self.aclose())
-
     @classmethod
     def take_self(cls, **kwargs):
         obj = cls(**kwargs)
@@ -78,11 +75,11 @@ class _Context:
         return obj
 
 class _NotCloseContext(_Context):
-    def close(self, *args):
+    def close(self):
         if self.get("__in_clearing__"):
             return
         else:
-            raise ExitSignal(*args)
+            raise RuntimeWarning("不得不在父上下文closing时关闭上下文")
 
-    async def aclose(self, *args):
-        return self.close(*args)
+    async def aclose(self):
+        return self.close()

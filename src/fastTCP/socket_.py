@@ -1,6 +1,8 @@
 import asyncio
 import struct
 
+import msgpack
+
 from .request_dq import RequestDequeManager
 from typing import Any, Protocol
 from .exceptions import ExitSignal
@@ -150,7 +152,11 @@ class _Socket(BaseSocket):
     async def response(self, response_message: ResponseMessage):
         await self._send_message(response_message)
 
-    async def request(self, cmd: str, body: Any) -> ResponseMessage:
+    async def request(self, cmd: str, body: Any) -> tuple[int, Any]:
         fut = self.req_dq_mg.enqueue()
+
         await self._send_message(make_requests(cmd, body))
-        return await fut
+
+        res_msg = await fut
+
+        return res_msg.status_code, msgpack.unpackb(res_msg.body)

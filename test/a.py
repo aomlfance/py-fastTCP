@@ -1,9 +1,9 @@
-from fastTCP.unification_socket import Maintenance
+from fastTCP.unification_socket import FastTCP
 from fastTCP.context import Context
 from fastTCP.socket_ import Socket
 from asyncio import run
 
-app = Maintenance()
+app = FastTCP()
 
 @app.route("global")
 async def hello(socket: Socket, msg: str):

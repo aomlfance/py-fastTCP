@@ -38,31 +38,37 @@ pip install -e .
 
 ## 简单的例子
 server
+
 ```python
-from fastTCP.unification_socket import Maintenance
+from fastTCP.unification_socket import FastTCP
 import asyncio
 
-app = Maintenance()
+app = FastTCP()
+
 
 @app.route("hello")
-def hello(name: str): # 由消息注入
+def hello(name: str):  # 由消息注入
     return f"hello {name}"
+
 
 asyncio.run(app.serve_forever("127.0.0.1", 8964))
 ```
 client
+
 ```python
-from fastTCP.unification_socket import Maintenance
+from fastTCP.unification_socket import FastTCP
 import asyncio
 
-client = Maintenance()
+client = FastTCP()
 
 name = "FastTCP"
+
 
 async def main():
     await client.connect("127.0.0.1", 8964)
     res = await client.request("hello", name)
     print(res.body)
+
 
 asyncio.run(main())
 ```

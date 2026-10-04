@@ -1,8 +1,8 @@
-from fastTCP.unification_socket import Maintenance
+from fastTCP.unification_socket import FastTCP
 from asyncio import run
 
-app = Maintenance()
-app2 = Maintenance()
+app = FastTCP()
+app2 = FastTCP()
 
 def c(__load__):
     print(__load__)
