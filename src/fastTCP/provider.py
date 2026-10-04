@@ -28,7 +28,10 @@ async def _return_annotation(__annotation__):
     return __annotation__
 
 async def _can_inject_msg(annotation, __load__):
-    return isinstance(annotation, type) and (isinstance(__load__, annotation) or issubclass(annotation, pydantic.BaseModel))
+    try:
+        return isinstance(annotation, type) and (isinstance(__load__, annotation) or issubclass(annotation, pydantic.BaseModel))
+    except TypeError:
+        return False
 
 async def _inject_msg(annotation, __load__):
     if isinstance(__load__, annotation):

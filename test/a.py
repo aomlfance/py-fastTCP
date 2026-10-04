@@ -1,15 +1,16 @@
 from fastTCP.unification_socket import Maintenance
-import os, psutil
+from fastTCP.context import Context
+from fastTCP.socket_ import Socket
+from asyncio import run
 
 app = Maintenance()
 
-p = psutil.Process(os.getpid())
+@app.route("global")
+async def hello(socket: Socket, msg: str):
+    for c in app.conns.values():
+        if c["__socket__"] == socket:
+            continue
+        await c["__socket__"].request("msg", {"sender": socket.address, "msg": msg})
+    return "ok"
 
-@app.route("hello")
-def hello(name: str):
-    print(f"当前进程内存: {p.memory_info().rss / 1024 / 1024:.1f} MB")
-    return f"Hello World {name}"
-
-from asyncio import run
-
-run(app.serve_forever("127.0.0.1", 8000))
+run(app.serve_forever("127.0.0.1", 8080))

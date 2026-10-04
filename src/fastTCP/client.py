@@ -29,6 +29,12 @@ class ClientFastTCP(Blueprint, _Socket):
         return self.supplier.provide(sell)
 
     async def connect(self):
+        """
+        Examples:
+            print("")
+        Returns:
+            None
+        """
         _Socket.__init__(self, *(await asyncio.open_connection(self.host, self.port)))
 
         self.context.long["__socket__"] = self

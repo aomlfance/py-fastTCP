@@ -1,3 +1,5 @@
+from typing import Any
+
 from .context import _Context
 from .msg import ResponseMessage
 from .socket_ import _Socket
@@ -31,9 +33,6 @@ class Maintenance(Blueprint):
         self.conns: dict[tuple, _Context] = {}
         self.supplier = Supplier.default()
 
-    def _get_context(self, __socket__: _Socket):
-        return self.conns[__socket__.address]
-
     def provide(self, *args, **kwargs):
         return self.supplier.provide(*args, **kwargs)
 
@@ -55,11 +54,37 @@ class Maintenance(Blueprint):
         await self._main_handler(*self._add_conn(r, w))
 
     async def serve_forever(self, *args, **kwargs):
+        """
+        监听主循环.
+
+        Args:
+            *args:
+            **kwargs:
+
+        Returns:
+
+        """
         async with (server := await asyncio.start_server(self._handle_client, *args, **kwargs)):
             await server.serve_forever()
 
-    def _add_conn(self, r: asyncio.StreamReader, w: asyncio.StreamWriter) -> tuple[_Context, _Socket]:
-        socket = _Socket(r, w)
+    def _add_conn(self, r: asyncio.StreamReader, w: asyncio.StreamWriter, *args, **kwargs) -> tuple[_Context, _Socket]:
+        """
+        添加一个连接.
+
+        把asyncio库返回的裸writer与reader, 封装为_Socket, 提供类socket的API, 并封装receive...等方法
+
+        并存入连接表, 创建连接上下文.
+
+        Args:
+            r: 原reader
+            w: 原writer
+            *args: 要传给_Socket.__init__的参数
+            **kwargs: 同*args
+
+        Returns:
+            返回一个tuple, [0] 为上下文(附自己与socket), [1] 为以及封装好的socket
+        """
+        socket = _Socket(r, w, *args, **kwargs)
 
         ctx = _Context.take_self(__socket__=socket)
 
@@ -74,9 +99,22 @@ class Maintenance(Blueprint):
 
         ...
 
-    async def connect(self, *args, **kwargs):
+    async def connect(self, *args, timeout: int | float | None = None, **kwargs):
+        """
+        连接到服务器
+
+        Args:
+            timeout: 接收超时的时间
+            *args: 继承至asyncio.open_connection的签名
+            **kwargs: 继承至asyncio.open_connection的签名
+
+        Returns:
+            返回一个在后台反复监听以路由与唤醒request的协程
+        """
+        r, w = await asyncio.open_connection(*args, **kwargs)
+
         ctx, socket = self._add_conn(
-            *(await asyncio.open_connection(*args, **kwargs))
+            r, w, timeout=timeout
         )
 
         task = asyncio.create_task(self._main_handler(ctx, socket))
@@ -84,7 +122,7 @@ class Maintenance(Blueprint):
         return task
 
     async def aclose(self):
+        """
+        清理所有连接上下文并如果存储的值有 close | aclose 方法会自动调用
+        """
         await _clear(self.conns)
-
-    def close(self):
-        asyncio.run(self.aclose())

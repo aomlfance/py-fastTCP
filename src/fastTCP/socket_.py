@@ -11,6 +11,8 @@ from .request import make_requests
 class Socket(Protocol):
     """实际向外开放的类"""
     # 实际接收由路由处理
+    address: tuple
+
     async def request(self, cmd: str , body: Any) -> ResponseMessage: ...
 
 class BaseSocket:
