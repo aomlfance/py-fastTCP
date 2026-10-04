@@ -68,7 +68,7 @@ class Maintenance(Blueprint):
         return ctx, socket
 
     async def _uninstall_conn(self, o : _Socket):
-        await o.close()
+        await o.aclose()
 
         self.conns.pop(o.address, None)
 

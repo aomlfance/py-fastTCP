@@ -73,7 +73,7 @@ class BaseSocket:
         self.write(bytes_)
         await self.drain()
 
-    async def close(self):
+    async def aclose(self):
         self.writer.close()
         await self.writer.wait_closed()
 

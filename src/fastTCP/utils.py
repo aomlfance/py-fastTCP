@@ -13,8 +13,8 @@ async def _clear(obj: dict):
     for n, o in obj.items():
         if hasattr(o, "aclose") and callable(o.aclose):
             handler = o.aclose
-        elif hasattr(o, "close") and callable(o.close):
-            handler = Async(o.close, "clogging")
+        elif hasattr(o, "close") and callable(o.aclose):
+            handler = Async(o.aclose, "clogging")
         else:
             continue
         try:

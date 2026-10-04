@@ -61,7 +61,7 @@ async def test_basic_request_response(server):
         res = await cli.request("ping", {})
         assert res.status_code == 200
         assert res.body.get("data") == "pong"
-        await cli.close()
+        await cli.aclose()
 
     @server.route("ping")
     def ping():
@@ -78,7 +78,7 @@ async def test_request_with_dict_body(server):
         res = await cli.request("echo", {"msg": "hello"})
         assert res.status_code == 200
         assert res.body.get("msg") == "hello"
-        await cli.close()
+        await cli.aclose()
 
     @server.route("echo")
     def echo(ctx: Context):
@@ -101,7 +101,7 @@ async def test_request_with_pydantic_model(server):
         res = await cli.request("register", User(name="alice", age=25))
         assert res.status_code == 200
         assert res.body.get("data") == "alice,25"
-        await cli.close()
+        await cli.aclose()
 
     @server.route("register")
     def register(user: User):
@@ -119,7 +119,7 @@ async def test_404_unknown_route(server):
         await cli.connect()
         res = await cli.request("nope", {})
         assert res.status_code == 404
-        await cli.close()
+        await cli.aclose()
 
     @server.route("exists")
     def exists():
@@ -136,7 +136,7 @@ async def test_wildcard_int_route(server):
         res = await cli.request("user.42", {})
         assert res.status_code == 200
         assert res.body.get("data") == "user_42"
-        await cli.close()
+        await cli.aclose()
 
     @server.route("user.<int:id>")
     def get_user(id: int):
@@ -153,7 +153,7 @@ async def test_wildcard_str_route(server):
         res = await cli.request("file.doc.txt", {})
         assert res.status_code == 200
         assert res.body.get("data") == "file:doc.txt"
-        await cli.close()
+        await cli.aclose()
 
     @server.route("file.<str:name>")
     def get_file(name: str):
@@ -172,7 +172,7 @@ async def test_before_middleware_passes_through(server):
         res = await cli.request("protected", {})
         assert res.status_code == 200
         assert res.body.get("data") == "welcome"
-        await cli.close()
+        await cli.aclose()
 
     @server.before("protected")
     def check(ctx: Context):
@@ -195,7 +195,7 @@ async def test_before_middleware_short_circuits(server):
         res = await cli.request("blocked", {})
         assert res.body.get("data") == "forbidden"
         assert len(main_called) == 0
-        await cli.close()
+        await cli.aclose()
 
     @server.before("blocked")
     def deny(ctx: Context):
@@ -217,7 +217,7 @@ async def test_global_before_with_wildcard(server):
         res = await cli.request("test_ts", {})
         assert res.status_code == 200
         assert res.body.get("data") == 12345
-        await cli.close()
+        await cli.aclose()
 
     @server.before("*")
     def add_timestamp(ctx: Context):
@@ -237,7 +237,7 @@ async def test_after_middleware_can_modify_response(server):
         await cli.connect()
         res = await cli.request("original", {})
         assert res.body.get("data") == "tagged"
-        await cli.close()
+        await cli.aclose()
 
     @server.route("original")
     def original():
@@ -267,7 +267,7 @@ async def test_multiple_requests_same_connection(server):
         r3 = await cli.request("add", {"a": 100, "b": 200})
         assert r3.body.get("data") == 300
 
-        await cli.close()
+        await cli.aclose()
 
     @server.route("add")
     def add(ctx: Context):
@@ -287,7 +287,7 @@ async def test_multiple_clients(server):
             await cli.connect()
             res = await cli.request("hello", {})
             results.append((name, res.status_code, res.body.get("data")))
-            await cli.close()
+            await cli.aclose()
 
         await asyncio.gather(
             client_task("c1"),
@@ -315,7 +315,7 @@ async def test_disconnect_handler_fires(server):
         cli = ClientFastTCP(host="127.0.0.1", port=srv.port)
         await cli.connect()
         await cli.request("hi", {})
-        await cli.close()
+        await cli.aclose()
         await asyncio.sleep(0.5)
         assert len(disconnected) >= 1
 
@@ -361,7 +361,7 @@ async def test_return_string_auto_wraps(server):
         await cli.connect()
         res = await cli.request("str", {})
         assert res.body == {"data": "hello"}
-        await cli.close()
+        await cli.aclose()
 
     @server.route("str")
     def str_resp():
@@ -377,7 +377,7 @@ async def test_return_dict_direct_body(server):
         await cli.connect()
         res = await cli.request("dict", {})
         assert res.body == {"key": "value", "count": 42}
-        await cli.close()
+        await cli.aclose()
 
     @server.route("dict")
     def dict_resp():
@@ -394,7 +394,7 @@ async def test_return_tuple_body_and_status(server):
         res = await cli.request("created", {})
         assert res.status_code == 201
         assert res.body == {"data": "resource"}
-        await cli.close()
+        await cli.aclose()
 
     @server.route("created")
     def created():
@@ -410,7 +410,7 @@ async def test_return_none_gives_204(server):
         await cli.connect()
         res = await cli.request("empty", {})
         assert res.status_code == 204
-        await cli.close()
+        await cli.aclose()
 
     @server.route("empty")
     def empty():

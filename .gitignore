@@ -2,3 +2,5 @@
 .venv
 .codewhale
 *.pyc
+fastTCP_dump.txt
+*.egg-info/

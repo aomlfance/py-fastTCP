@@ -21,7 +21,7 @@ async def test():
     await cli.connect()
     res = await cli.request('original', {})
     print(f'status={res.status_code} body={res.body}')
-    await cli.close()
+    await cli.aclose()
     task.cancel()
     try:
         await task

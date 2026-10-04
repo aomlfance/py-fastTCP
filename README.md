@@ -6,7 +6,7 @@
 
 > [!NOTE]
 > 并非依赖了3.14以上的模块, 而是基于[PEP 649](https://peps.python.org/pep-0649/)进行开发.  
-> 实际支持仍在python3.10+
+> 实际依赖库的支持仍在python3.10+
 
 异步、简洁、类 FastAPI 代码风格，让写 TCP 像写 Web 框架一样简单。
 
@@ -39,28 +39,28 @@ pip install -e .
 ## 简单的例子
 server
 ```python
-from fastTCP import FastTCPServer
+from fastTCP.unification_socket import Maintenance
 import asyncio
 
-app = FastTCPServer()
+app = Maintenance()
 
 @app.route("hello")
 def hello(name: str): # 由消息注入
     return f"hello {name}"
 
-asyncio.run(app.serve_forever())
+asyncio.run(app.serve_forever("127.0.0.1", 8964))
 ```
 client
 ```python
-from fastTCP import ClientFastTCP
+from fastTCP.unification_socket import Maintenance
 import asyncio
 
-client = ClientFastTCP()
+client = Maintenance()
 
 name = "FastTCP"
 
 async def main():
-    await client.connect()
+    await client.connect("127.0.0.1", 8964)
     res = await client.request("hello", name)
     print(res.body)
 
