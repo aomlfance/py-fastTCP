@@ -33,10 +33,10 @@ async def _can_inject_msg(annotation: Annotation, loaded: Loaded):
         return False
 
 async def _inject_msg(annotation: Annotation, loaded: Loaded):
-    if isinstance(loaded, annotation):
-        return loaded
-    else:
-        return annotation(**loaded)
+    return loaded if isinstance(loaded, annotation) else annotation(**loaded)
+
+def _map(key:str):
+    return eval(f"lambda {key}:{key}")
 
 class Supplier:
     def __init__(self):
@@ -81,13 +81,17 @@ class Supplier:
     def default(cls):
         """默认实现由Socket, context, message类型提示 -> 魔法键"""
         obj = cls()
-        obj.provide(Socket)(lambda __socket__: __socket__)
-        obj.provide(Context)(lambda __context__: __context__)
-        obj.provide(RequestMessage)(lambda __message__: __message__)
-        obj.provide(ResponseMessage)(lambda __response__: __response__)
+        obj.provide(Socket)(_map("__socket__"))
+        obj.provide(Context)(_map("__context__"))
+        obj.provide(RequestMessage)(_map("__message__"))
+
+        obj.provide(ResponseMessage)(_map("__response__"))
         obj.provide(ResponseQ)(_can_none_response)
+
         obj.provide("__load__")(_load)
-        obj.provide(Loaded)(lambda __load__: __load__)
-        obj.provide(Annotation)(lambda __annotation__ : __annotation__)
+        obj.provide(Loaded)(_map("__load__"))
+
+        obj.provide(Annotation)(_map("__annotation__"))
+
         obj.match(_can_inject_msg)(_inject_msg)
         return obj

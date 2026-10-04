@@ -35,19 +35,22 @@ class FastTCP(Blueprint):
 
     def provide(self, sell: Any) -> Callable[[_OF], _OF]:
         """
-        显式声明提供什么:
+        显式声明提供什么. 优先级高于match.
 
         Args:
-            sell:
+            sell: 一个可hash对象(dict要求)
 
         Returns:
+            返回一个装饰器(接受一个函数的函数),其形参函数(也可以被注入)的返回值会被当作注入的值.
 
+        Notes:
+            由于判断函数, 取值函数都可以被注入取得Context, 也可以达到惰性求值的效果
         """
         return self.supplier.provide(sell)
 
     def match(self, judgment_thing: Callable) -> Callable[[_OF], _OF]:
         """
-        匹配.传入一个判断的函数.其返回值的bool会决策是否调用其真处理者取值.
+        匹配.传入一个判断的函数.其返回值的bool会决策是否调用其真处理者取值.(优先级小于provide)
 
         Args:
             judgment_thing: 判断的函数(这个函数也可以被注入)
@@ -56,7 +59,7 @@ class FastTCP(Blueprint):
             返回一个装饰器(接受一个函数的函数),其形参函数(也可以被注入)的返回值会被当作注入的值.
 
         Notes:
-            由于判断函数, 取值函数都可以被注入取得Context, 也可以达到惰性求值的效果
+            见provide.
         """
         return self.supplier.match(judgment_thing)
 
