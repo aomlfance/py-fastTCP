@@ -34,9 +34,30 @@ class FastTCP(Blueprint):
         self.supplier = Supplier.default()
 
     def provide(self, sell: Any) -> Callable[[_OF], _OF]:
+        """
+        显式声明提供什么:
+
+        Args:
+            sell:
+
+        Returns:
+
+        """
         return self.supplier.provide(sell)
 
     def match(self, judgment_thing: Callable) -> Callable[[_OF], _OF]:
+        """
+        匹配.传入一个判断的函数.其返回值的bool会决策是否调用其真处理者取值.
+
+        Args:
+            judgment_thing: 判断的函数(这个函数也可以被注入)
+
+        Returns:
+            返回一个装饰器(接受一个函数的函数),其形参函数(也可以被注入)的返回值会被当作注入的值.
+
+        Notes:
+            由于判断函数, 取值函数都可以被注入取得Context, 也可以达到惰性求值的效果
+        """
         return self.supplier.match(judgment_thing)
 
     @property
@@ -156,7 +177,13 @@ class FastTCP(Blueprint):
         Returns:
             返回一个在后台反复监听以路由与唤醒request的协程
         """
-        r, w = await asyncio.open_connection(*args, **kwargs)
+        try:
+            r, w = await asyncio.wait_for(
+                asyncio.open_connection(*args, **kwargs),
+                float("inf") if timeout is None else timeout
+            )
+        except asyncio.TimeoutError:
+            raise
 
         ctx, socket = self._add_conn(
             r, w, timeout=timeout

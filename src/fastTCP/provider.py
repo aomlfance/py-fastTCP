@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Callable, Any, TypeAlias, Literal
 import msgpack
 import pydantic
 
@@ -7,44 +7,43 @@ from .msg import RequestMessage, ResponseMessage
 from .socket_ import Socket
 from .utils import TempSignature
 from .injection import call_like_route
+from datetime import datetime
 
-async def _get_socket(__socket__): return __socket__
+ResponseQ: TypeAlias = ResponseMessage | None # ResponseQ的意思是允许判空
 
-async def _get_message(__message__): return __message__
+Loaded: TypeAlias = (
+        Literal[0, False, True] | list[Any] | Any | tuple[Any] | int |
+        None | dict[Any, Any] | bytes | Any | str | float | pydantic.BaseModel |
+        datetime | msgpack.ext.Timestamp | msgpack.ext.ExtType | bytearray
+)
 
-async def _get_context(__context__): return __context__
+Annotation: TypeAlias = type | Any
 
-async def _get_response(__response__): return __response__
+async def _can_none_response(ctx: Context):
+    return None if "__response__" not in ctx else ctx["__response__"]
 
 async def _load(ctx: Context, message: RequestMessage):
-    if "__load__" in ctx:
-        return ctx["__load__"]
-
     ctx.short["__load__"] = msgpack.unpackb(message.body)
-
     return ctx.short["__load__"]
 
-async def _return_annotation(__annotation__):
-    return __annotation__
-
-async def _can_inject_msg(annotation, __load__):
+async def _can_inject_msg(annotation: Annotation, loaded: Loaded):
     try:
-        return isinstance(annotation, type) and (isinstance(__load__, annotation) or issubclass(annotation, pydantic.BaseModel))
+        return isinstance(annotation, type) and (isinstance(loaded, annotation) or issubclass(annotation, pydantic.BaseModel))
     except TypeError:
         return False
 
-async def _inject_msg(annotation, __load__):
-    if isinstance(__load__, annotation):
-        return __load__
+async def _inject_msg(annotation: Annotation, loaded: Loaded):
+    if isinstance(loaded, annotation):
+        return loaded
     else:
-        return annotation(**__load__)
+        return annotation(**loaded)
 
 class Supplier:
     def __init__(self):
-        self._store: dict[type | str, Callable] = {}
+        self._store: dict[Any, Callable] = {}
         self.matchings: list[tuple[Callable[..., bool], Callable]] = []
 
-    def provide(self, sell: type | str):
+    def provide(self, sell: Any):
         def decorator(handler):
             self._store[sell] = TempSignature(handler)
             return handler
@@ -82,11 +81,13 @@ class Supplier:
     def default(cls):
         """默认实现由Socket, context, message类型提示 -> 魔法键"""
         obj = cls()
-        obj.provide(Socket)(_get_socket)
-        obj.provide(Context)(_get_context)
-        obj.provide(RequestMessage)(_get_message)
-        obj.provide(ResponseMessage)(_get_response)
+        obj.provide(Socket)(lambda __socket__: __socket__)
+        obj.provide(Context)(lambda __context__: __context__)
+        obj.provide(RequestMessage)(lambda __message__: __message__)
+        obj.provide(ResponseMessage)(lambda __response__: __response__)
+        obj.provide(ResponseQ)(_can_none_response)
         obj.provide("__load__")(_load)
-        obj.provide("annotation")(_return_annotation)
+        obj.provide(Loaded)(lambda __load__: __load__)
+        obj.provide(Annotation)(lambda __annotation__ : __annotation__)
         obj.match(_can_inject_msg)(_inject_msg)
         return obj
