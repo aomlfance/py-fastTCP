@@ -1,9 +1,11 @@
 from typing import Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..context import _Context, MagicKey
+    from ..context import _Context
     from ..response import ResponseMessage
     from ..provider import Supplier
+
+from ..context import MagicKey
 
 from enum import Enum
 from re import Pattern

@@ -3,11 +3,12 @@ from warnings import warn
 
 if TYPE_CHECKING:
     from .route import Route
-    from .context import _Context, MagicKey
+    from .context import _Context
     from .msg import ResponseMessage
     from .provider import Supplier
     from .msg import RequestMessage
 
+from .context import MagicKey
 from .response import make_response, default_response
 
 class Chain:
