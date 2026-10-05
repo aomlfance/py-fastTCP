@@ -1,12 +1,11 @@
-import asyncio
-from typing import Any, Protocol
+from types import GenericAlias
+from typing import Any, Protocol, get_origin
 from .utils import _clear
-from .exceptions import ExitSignal
 
 class Context(Protocol):
     """对外api"""
-    long: dict[str, Any]
-    short: dict[str, Any]
+    long: dict[str | MagicKey, Any]
+    short: dict[str | MagicKey, Any]
 
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -27,6 +26,29 @@ class Context(Protocol):
         item是否在上下文中.
         """
 
+class MagicKey:
+    """
+    该类用来与普通上下文键对区分.
+    常存储在上下文中.
+
+    用意: 现在的 __?__ 格式很脆弱， 有可能被匹配, 误引用.
+    """
+    __slots__ = ("name", )
+
+    def __class_getitem__(cls, item: str) -> GenericAlias:
+        return GenericAlias(cls, (item,))
+
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, value: object, /) -> bool:
+        if not isinstance(value, MagicKey):
+            return NotImplemented
+        return self.name == value.name
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
 class _Context:
     # 1.
     # ! 并不是你在把东西都装在上下文都万事大吉
@@ -41,24 +63,24 @@ class _Context:
     # 所以provide也只是为了处理_Context无法处理的形参
     # 这么想的话， 那供应商就不应该存在于_Context, 应该作为一个专门的形参传入注入
     def __init__(self, **kwargs):
-        self.long: dict[str, Any] = {}
+        self.long: dict[str | MagicKey, Any] = {}
         self.long.update(kwargs)
 
-        self.short: dict[str, Any] = {}
+        self.short: dict[str | MagicKey, Any] = {}
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str | MagicKey, default: Any = None) -> Any:
         for m in (self.long, self.short):
             if key in m: return m[key]
         else:
             return default
 
-    def __getitem__(self, item: str) -> Any:
+    def __getitem__(self, item: str | MagicKey) -> Any:
         if item not in self:
             raise IndexError("item not in context")
         else:
             return self.get(item)
 
-    def __contains__(self, item: str) -> bool:
+    def __contains__(self, item: str | MagicKey) -> bool:
         return item in self.long or item in self.short
 
     async def refresh(self):
@@ -67,12 +89,12 @@ class _Context:
     async def aclose(self):
         await self.refresh()
 
-        self.long["__in_clearing__"] = True # in_end
+        self.long[MagicKey("in_clearing")] = True # in_end
 
         try:
             await _clear(self.long)
         finally:
-            self.long.pop("__in_clearing__", None)
+            self.long.pop(MagicKey("in_clearing"), None)
 
     @classmethod
     def take_self(cls, **kwargs):
@@ -83,13 +105,13 @@ class _Context:
         not_close_ctx.long = obj.long
         not_close_ctx.short = obj.short
 
-        obj.long["__context__"] = not_close_ctx
+        obj.long[MagicKey("context")] = not_close_ctx
 
         return obj
 
 class _NotCloseContext(_Context):
     def close(self):
-        if self.get("__in_clearing__"):
+        if self.get(MagicKey("in_clearing")):
             return
         else:
             raise RuntimeWarning("不得不在父上下文closing时关闭上下文")

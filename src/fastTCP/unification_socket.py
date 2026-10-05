@@ -1,5 +1,5 @@
 from typing import Any, Callable, TypeVar
-from .context import _Context
+from .context import _Context, MagicKey
 from .socket_ import _Socket
 from .exceptions import ExitSignal
 from .handler import process_msg
@@ -78,7 +78,7 @@ class FastTCP(Blueprint):
         if len(self.conns) != 1:
             raise RuntimeError("连接不唯一")
         else:
-            return next(iter(self.conns.values()))["__socket__"]
+            return next(iter(self.conns.values()))[MagicKey("socket")]
 
     @property
     def address(self):
@@ -148,7 +148,8 @@ class FastTCP(Blueprint):
         """
         socket = _Socket(r, w, *args, **kwargs)
 
-        ctx = _Context.take_self(__socket__=socket)
+        ctx = _Context.take_self()
+        ctx.long[MagicKey("socket")] = socket
 
         self.conns[socket.address] = ctx
 

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from msg import RequestMessage
 
 import inspect
-from .context import _Context
+from .context import _Context, Context, MagicKey
 import logging
 from .utils import Async
 from .exceptions import ExitSignal, Abort
@@ -31,11 +31,10 @@ async def call_like_route(handler: Callable, ctx: _Context, supplier: Supplier):
 
 class NotCoveredLevel:
     """作用域内为 ctx 补齐缺失的键; 已存在的键一律不覆盖, 退出时只回收自己写入的键."""
-
-    def __init__(self, father: _Context, *args: tuple[str, Any]):
+    def __init__(self, father: _Context, *args: tuple[str | MagicKey, Any]):
         self.context = father
         self.defaults = dict(args)
-        self.mine: set[str] = set()
+        self.mine: set[str | MagicKey] = set()
 
     def __enter__(self):
         for name, value in self.defaults.items():
@@ -57,14 +56,20 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     if param.name in ctx:
         return ctx[param.name]
 
+    # Context 是内核自身的类型, 直接给当前上下文(取 not_close 代理),
+    # 否则 store[Context] -> _map -> 注入 ctx: Context -> 无限自递归
+    if param.annotation is Context or param.annotation is _Context:
+        mk = MagicKey("context")
+        return ctx[mk] if mk in ctx else ctx
+
     with NotCoveredLevel(
             ctx,
-            ("__annotation__", param.annotation),
-            ("__inspector_stack__", []),
+            (MagicKey("annotation"), param.annotation),
+            (MagicKey("inspector_stack"), []),
             # 判断器栈防止同一个判断器在当前判断路径中递归进入自己
             # ex.: -> 由A判断 -> 查询A首参数A_arg -> 让A判断|(无链) -> 查询A_arg ->
             #                                            |(有栈判断) -> 下一个判断器B
-            ("__provider_stack__", [])
+            (MagicKey("provider_stack"), [])
             # 提供栈防的是循环依赖(因为提供者也可以被注入)
             # ex.: -> A提供者|(无栈) -> 查询A-arg -> 取得B提供者 -> 查询B_arg -> A判断器
             #               |(有栈, 发现自己被重复依赖, 报错, 否则等到无限递归报错)
@@ -73,7 +78,7 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
             #       inspector_stack 只描述当前仍在进行的判断器调用路径
         ):
         if provider := (await supplier.query(param.name, ctx) or await supplier.query(param.annotation, ctx)):
-            provider_stack: list[Callable] = ctx["__provider_stack__"]
+            provider_stack: list[Callable] = ctx[MagicKey("provider_stack")]
 
             provider_stack.append(provider)
 

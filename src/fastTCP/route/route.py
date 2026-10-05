@@ -1,6 +1,7 @@
 from typing import Callable, TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from ..context import _Context
+    from ..context import _Context, MagicKey
     from ..response import ResponseMessage
     from ..provider import Supplier
 
@@ -62,7 +63,8 @@ class Route:
         else:
             result = make_response(result)
 
-        ctx.short["__response__"] = result
+        ctx.short[MagicKey("response")] = result
+
         return result
 
 def UNKNOWN_CMD():

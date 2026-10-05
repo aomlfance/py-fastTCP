@@ -3,7 +3,7 @@ from warnings import warn
 
 if TYPE_CHECKING:
     from .route import Route
-    from .context import _Context
+    from .context import _Context, MagicKey
     from .msg import ResponseMessage
     from .provider import Supplier
     from .msg import RequestMessage
@@ -26,7 +26,7 @@ class Chain:
     async def __call__(self, context: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage:
         context.short.update(self.param)
 
-        context.short["__message__"] = message
+        context.short[MagicKey("message")] = message
 
         for before_route in self.before:
             res = await before_route(context, supplier)
