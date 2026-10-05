@@ -57,23 +57,28 @@ class Supplier:
 
     async def query(self, name_or_type: Any, ctx: _Context) -> Callable | None:
         if (r1 := self._store.get(name_or_type)) is None:
-            match_chain: list = ctx["__match_chain__"]
+            inspector_stack: list = ctx["__inspector_stack__"]
+            provider_stack: list = ctx["__provider_stack__"]
 
             for i, t in self.matchings:
 
-                if i in match_chain:
+                if i in inspector_stack or t in provider_stack:
                     continue
 
-                match_chain.append(i)
+                inspector_stack.append(i)
 
                 try:
                     if await call_like_route(i, ctx, self):
                         return t
                 finally:
-                    del match_chain[-1]
+                    inspector_stack.pop()
 
             else:
                 return None
+        # 这由于如果没过matchings的话就不会运行if i in inspector_stack or t in provider_stack, 这里要检验.
+        # 而这里直接报错误是因为provide的方法提供参数是显式的, 而match是隐式.两者不可以混为一谈.
+        elif r1 in ctx["__provider_stack__"]:
+            raise RuntimeError(f"循环依赖: provider {r1} 重复进入")
         else:
             return r1
 

@@ -57,12 +57,30 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     if param.name in ctx:
         return ctx[param.name]
 
-    with NotCoveredLevel(ctx, ("__annotation__", param.annotation), ("__match_chain__", [])):
-        if provider := await supplier.query(param.name, ctx):
-            return await call_like_route(provider, ctx, supplier)
+    with NotCoveredLevel(
+            ctx,
+            ("__annotation__", param.annotation),
+            ("__inspector_stack__", []),
+            # 判断器栈防止同一个判断器在当前判断路径中递归进入自己
+            # ex.: -> 由A判断 -> 查询A首参数A_arg -> 让A判断|(无链) -> 查询A_arg ->
+            #                                            |(有栈判断) -> 下一个判断器B
+            ("__provider_stack__", [])
+            # 提供栈防的是循环依赖(因为提供者也可以被注入)
+            # ex.: -> A提供者|(无栈) -> 查询A-arg -> 取得B提供者 -> 查询B_arg -> A判断器
+            #               |(有栈, 发现自己被重复依赖, 报错, 否则等到无限递归报错)
+            # Note: 判断器返回提供者前会弹出自身，因此 provider 开始执行时
+            #       当前这一层判断器不会继续留在 inspector_stack 中
+            #       inspector_stack 只描述当前仍在进行的判断器调用路径
+        ):
+        if provider := (await supplier.query(param.name, ctx) or await supplier.query(param.annotation, ctx)):
+            provider_stack: list[Callable] = ctx["__provider_stack__"]
 
-        if provider := await supplier.query(param.annotation, ctx):
-            return await call_like_route(provider, ctx, supplier)
+            provider_stack.append(provider)
+
+            try:
+                return await call_like_route(provider, ctx, supplier)
+            finally:
+                provider_stack.pop()
 
     raise TypeError(
         f"缺少参数{param.name}"

@@ -8,11 +8,24 @@ class Context(Protocol):
     long: dict[str, Any]
     short: dict[str, Any]
 
-    def get(self, key: str, default: Any = None) -> Any: ...
-    def __getitem__(self, item: str) -> Any: ...
-    def __contains__(self, item: str) -> bool: ...
-    # 关于set, 与del
-    # 必须显式申明生命周期
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        从上下文中安全取值(类dict.get).优先long再short.
+        """
+        pass
+
+    def __getitem__(self, item: str) -> Any:
+        """
+        从上下文中取值(类dict[]).优先long再short.
+
+        Raises:
+            KeyError: 当item既不在long, 也不在short时
+        """
+
+    def __contains__(self, item: str) -> bool:
+        """
+        item是否在上下文中.
+        """
 
 class _Context:
     # 1.
