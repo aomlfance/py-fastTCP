@@ -1,4 +1,4 @@
-from typing import Callable, Any, TypeAlias, Literal
+from typing import Callable, Any, TypeAlias, Literal, get_origin, get_args
 import msgpack
 import pydantic
 
@@ -24,8 +24,10 @@ async def _can_none_response(ctx: Context):
 
 async def _load(ctx: Context, message: RequestMessage):
     key = MagicKey("load")
+
     if key not in ctx:
         ctx.short[key] = msgpack.unpackb(message.body)
+
     return ctx.short[key]
 
 async def _can_inject_msg(annotation: Annotation, loaded: Loaded):
@@ -41,6 +43,12 @@ def _map(key: MagicKey):
     async def getter(ctx: Context):
         return ctx[key]
     return getter
+
+async def _is_magic_key(annotation: Annotation):
+    return get_origin(annotation) == MagicKey
+
+async def _inject_magic_key(annotation: Annotation, ctx: Context):
+    return ctx[MagicKey(get_args(annotation)[0])]
 
 class Supplier:
     def __init__(self):
@@ -97,9 +105,11 @@ class Supplier:
         obj.provide(ResponseMessage)(_map(MagicKey("response")))
         obj.provide(ResponseQ)(_can_none_response)
 
-        obj.provide(Loaded)(_load)
+        obj.provide(MagicKey("load"))(_load)
+        obj.provide(Loaded)(_map(MagicKey("load")))
 
         obj.provide(Annotation)(_map(MagicKey("annotation")))
 
+        obj.match(_is_magic_key)(_inject_magic_key)
         obj.match(_can_inject_msg)(_inject_msg)
         return obj

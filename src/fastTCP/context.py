@@ -7,13 +7,13 @@ class Context(Protocol):
     long: dict[str | MagicKey, Any]
     short: dict[str | MagicKey, Any]
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str | MagicKey, default: Any = None) -> Any:
         """
         从上下文中安全取值(类dict.get).优先long再short.
         """
         pass
 
-    def __getitem__(self, item: str) -> Any:
+    def __getitem__(self, item: str | MagicKey) -> Any:
         """
         从上下文中取值(类dict[]).优先long再short.
 
@@ -21,7 +21,7 @@ class Context(Protocol):
             KeyError: 当item既不在long, 也不在short时
         """
 
-    def __contains__(self, item: str) -> bool:
+    def __contains__(self, item: str | MagicKey) -> bool:
         """
         item是否在上下文中.
         """
