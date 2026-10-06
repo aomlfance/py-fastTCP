@@ -56,15 +56,17 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     if param.name in ctx:
         return ctx[param.name]
 
-    # Context 是内核自身的类型, 直接给当前上下文(取 not_close 代理),
-    # 否则 store[Context] -> _map -> 注入 ctx: Context -> 无限自递归
+    # 关于take_self工厂, 它解决"取到哪个ctx实例"(not_close代理);
+    # 这里的特判解决的是"打断 provider 自递归":
+    # 否则 note_store[Context] -> _map(MagicKey("context")) -> 注入 ctx: Context -> 又查到同一个 _map -> 循环依赖
     if param.annotation is Context or param.annotation is _Context:
         mk = MagicKey("context")
         return ctx[mk] if mk in ctx else ctx
 
     with NotCoveredLevel(
             ctx,
-            (MagicKey("annotation"), param.annotation),
+            (MagicKey("param"), param),
+            # 父参数的意思, 即父runner中真实的一个参数, 而非其子判断器|子提供者的参数混淆
             (MagicKey("inspector_stack"), []),
             # 判断器栈防止同一个判断器在当前判断路径中递归进入自己
             # ex.: -> 由A判断 -> 查询A首参数A_arg -> 让A判断|(无链) -> 查询A_arg ->
@@ -77,8 +79,16 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
             #       当前这一层判断器不会继续留在 inspector_stack 中
             #       inspector_stack 只描述当前仍在进行的判断器调用路径
         ):
-        if provider := (await supplier.query(param.name, ctx) or await supplier.query(param.annotation, ctx)):
-            provider_stack: list[Callable] = ctx[MagicKey("provider_stack")]
+        inspector_stack = ctx[MagicKey("inspector_stack")]
+        provider_stack  = ctx[ MagicKey("provider_stack")]
+
+        if provider := (
+            supplier.query_by_note(param.annotation)
+            or supplier.query_by_param(param.name)
+            or await supplier.match(ctx, inspector_stack, provider_stack)
+        ):
+            if provider in provider_stack:
+                raise RuntimeError(f"循环依赖: {provider_stack} + {provider}")
 
             provider_stack.append(provider)
 

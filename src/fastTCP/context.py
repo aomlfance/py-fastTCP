@@ -1,3 +1,4 @@
+import inspect
 from types import GenericAlias
 from typing import Any, Protocol, get_origin
 from .utils import _clear
@@ -31,7 +32,12 @@ class MagicKey:
     该类用来与普通上下文键对区分.
     常存储在上下文中.
 
-    用意: 现在的 __?__ 格式很脆弱， 有可能被匹配, 误引用.
+    用意:  __?__ 格式很脆弱， 有可能被匹配, 误引用.
+
+    Notes:
+        由于MagicKey非str,无法正常注入到同名参数.所以要通过注解注入.
+
+        MagicKey提供了is_magic_key判断与inject_magic_key提供.
     """
     __slots__ = ("name", )
 
@@ -48,6 +54,10 @@ class MagicKey:
 
     def __hash__(self) -> int:
         return hash(self.name)
+
+    @staticmethod
+    def is_magic_key(param: inspect.Parameter):
+        ...
 
 class _Context:
     # 1.
