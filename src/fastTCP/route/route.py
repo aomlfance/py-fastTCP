@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from ..response import ResponseMessage
     from ..provider import Supplier
 
-from ..context import MagicKey
+from ..context import Context  # noqa: F401
 
 from enum import Enum
 from re import Pattern
@@ -16,6 +16,7 @@ from ..response import default_response, make_response
 from ..utils import TempSignature
 from ..injection import call_like_route
 from ..exceptions import ExitSignal
+import pydantic
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,10 @@ class Route:
             result = await call_like_route(self.handler, ctx, supplier)
         except ExitSignal:
             raise
+        except pydantic.ValidationError:
+            # pydantic 校验失败属于客户端数据错误 -> 400
+            logger.error("pydantic ValidationError - 请求数据未通过校验")
+            result = default_response(400)
         except Exception as e:
             logger.error(f"{type(e)} - {e}")
             result = default_response(500)
@@ -65,7 +70,7 @@ class Route:
         else:
             result = make_response(result)
 
-        ctx.short[MagicKey("response")] = result
+        ctx.short["__response__"] = result
 
         return result
 

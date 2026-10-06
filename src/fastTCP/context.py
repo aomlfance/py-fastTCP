@@ -1,20 +1,21 @@
-import inspect
-from types import GenericAlias
-from typing import Any, Protocol, get_origin
+from typing import Any, Protocol
 from .utils import _clear
+
+# 魔法键约定: __?__ 格式的字符串 (如 __socket__ / __context__ / __param__).
+# 注意: 该格式可能与用户同名参数/同名上下文键撞车 (脆弱但简单).
 
 class Context(Protocol):
     """对外api"""
-    long: dict[str | MagicKey, Any]
-    short: dict[str | MagicKey, Any]
+    long: dict[str, Any]
+    short: dict[str, Any]
 
-    def get(self, key: str | MagicKey, default: Any = None) -> Any:
+    def get(self, key: str, default: Any = None) -> Any:
         """
         从上下文中安全取值(类dict.get).优先long再short.
         """
         pass
 
-    def __getitem__(self, item: str | MagicKey) -> Any:
+    def __getitem__(self, item: str) -> Any:
         """
         从上下文中取值(类dict[]).优先long再short.
 
@@ -22,42 +23,10 @@ class Context(Protocol):
             KeyError: 当item既不在long, 也不在short时
         """
 
-    def __contains__(self, item: str | MagicKey) -> bool:
+    def __contains__(self, item: str) -> bool:
         """
         item是否在上下文中.
         """
-
-class MagicKey:
-    """
-    该类用来与普通上下文键对区分.
-    常存储在上下文中.
-
-    用意:  __?__ 格式很脆弱， 有可能被匹配, 误引用.
-
-    Notes:
-        由于MagicKey非str,无法正常注入到同名参数.所以要通过注解注入.
-
-        MagicKey提供了is_magic_key判断与inject_magic_key提供.
-    """
-    __slots__ = ("name", )
-
-    def __class_getitem__(cls, item: str) -> GenericAlias:
-        return GenericAlias(cls, (item,))
-
-    def __init__(self, name):
-        self.name = name
-
-    def __eq__(self, value: object, /) -> bool:
-        if not isinstance(value, MagicKey):
-            return NotImplemented
-        return self.name == value.name
-
-    def __hash__(self) -> int:
-        return hash(self.name)
-
-    @staticmethod
-    def is_magic_key(param: inspect.Parameter):
-        ...
 
 class _Context:
     # 1.
@@ -73,24 +42,24 @@ class _Context:
     # 所以provide也只是为了处理_Context无法处理的形参
     # 这么想的话， 那供应商就不应该存在于_Context, 应该作为一个专门的形参传入注入
     def __init__(self, **kwargs):
-        self.long: dict[str | MagicKey, Any] = {}
+        self.long: dict[str, Any] = {}
         self.long.update(kwargs)
 
-        self.short: dict[str | MagicKey, Any] = {}
+        self.short: dict[str, Any] = {}
 
-    def get(self, key: str | MagicKey, default: Any = None) -> Any:
+    def get(self, key: str, default: Any = None) -> Any:
         for m in (self.long, self.short):
             if key in m: return m[key]
         else:
             return default
 
-    def __getitem__(self, item: str | MagicKey) -> Any:
+    def __getitem__(self, item: str) -> Any:
         if item not in self:
             raise IndexError("item not in context")
         else:
             return self.get(item)
 
-    def __contains__(self, item: str | MagicKey) -> bool:
+    def __contains__(self, item: str) -> bool:
         return item in self.long or item in self.short
 
     async def refresh(self):
@@ -99,12 +68,12 @@ class _Context:
     async def aclose(self):
         await self.refresh()
 
-        self.long[MagicKey("in_clearing")] = True # in_end
+        self.long["__in_clearing__"] = True # in_end
 
         try:
             await _clear(self.long)
         finally:
-            self.long.pop(MagicKey("in_clearing"), None)
+            self.long.pop("__in_clearing__", None)
 
     @classmethod
     def take_self(cls, **kwargs):
@@ -115,13 +84,13 @@ class _Context:
         not_close_ctx.long = obj.long
         not_close_ctx.short = obj.short
 
-        obj.long[MagicKey("context")] = not_close_ctx
+        obj.long["__context__"] = not_close_ctx
 
         return obj
 
 class _NotCloseContext(_Context):
     def close(self):
-        if self.get(MagicKey("in_clearing")):
+        if self.get("__in_clearing__"):
             return
         else:
             raise RuntimeWarning("不得不在父上下文closing时关闭上下文")

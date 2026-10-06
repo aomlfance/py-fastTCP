@@ -10,11 +10,12 @@ def short_name(obj: Any):
     return repr(obj) if len(repr(obj)) < 12 else repr(obj)[:12]
 
 async def _clear(obj: dict):
-    for n, o in obj.items():
+    # 迭代快照: 被清理对象的关闭流程可能反向修改此dict(如_uninstall_conn)
+    for n, o in list(obj.items()):
         if hasattr(o, "aclose") and callable(o.aclose):
             handler = o.aclose
-        elif hasattr(o, "close") and callable(o.aclose):
-            handler = Async(o.aclose, "clogging")
+        elif hasattr(o, "close") and callable(o.close):
+            handler = Async(o.close, "clogging")
         else:
             continue
         try:

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .provider import Supplier
     from .msg import RequestMessage
 
-from .context import MagicKey
+from .context import Context  # noqa: F401 保留原导入位置
 from .response import make_response, default_response
 
 class Chain:
@@ -27,7 +27,7 @@ class Chain:
     async def __call__(self, context: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage:
         context.short.update(self.param)
 
-        context.short[MagicKey("message")] = message
+        context.short["__message__"] = message
 
         for before_route in self.before:
             res = await before_route(context, supplier)

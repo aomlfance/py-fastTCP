@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from msg import RequestMessage
 
 import inspect
-from .context import _Context, Context, MagicKey
+from .context import _Context, Context
 import logging
 from .utils import Async
 from .exceptions import ExitSignal, Abort
@@ -31,10 +31,10 @@ async def call_like_route(handler: Callable, ctx: _Context, supplier: Supplier):
 
 class NotCoveredLevel:
     """作用域内为 ctx 补齐缺失的键; 已存在的键一律不覆盖, 退出时只回收自己写入的键."""
-    def __init__(self, father: _Context, *args: tuple[str | MagicKey, Any]):
+    def __init__(self, father: _Context, *args: tuple[str, Any]):
         self.context = father
         self.defaults = dict(args)
-        self.mine: set[str | MagicKey] = set()
+        self.mine: set[str] = set()
 
     def __enter__(self):
         for name, value in self.defaults.items():
@@ -58,20 +58,17 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
 
     # 关于take_self工厂, 它解决"取到哪个ctx实例"(not_close代理);
     # 这里的特判解决的是"打断 provider 自递归":
-    # 否则 note_store[Context] -> _map(MagicKey("context")) -> 注入 ctx: Context -> 又查到同一个 _map -> 循环依赖
-    if param.annotation is Context or param.annotation is _Context:
-        mk = MagicKey("context")
-        return ctx[mk] if mk in ctx else ctx
+    # 否则 note_store[Context] -> _map(__context__) -> 注入 ctx: Context -> 又查到同一个 _map -> 循环依赖
 
     with NotCoveredLevel(
             ctx,
-            (MagicKey("param"), param),
+            ("__param__", param),
             # 父参数的意思, 即父runner中真实的一个参数, 而非其子判断器|子提供者的参数混淆
-            (MagicKey("inspector_stack"), []),
+            ("__inspector_stack__", []),
             # 判断器栈防止同一个判断器在当前判断路径中递归进入自己
             # ex.: -> 由A判断 -> 查询A首参数A_arg -> 让A判断|(无链) -> 查询A_arg ->
             #                                            |(有栈判断) -> 下一个判断器B
-            (MagicKey("provider_stack"), [])
+            ("__provider_stack__", [])
             # 提供栈防的是循环依赖(因为提供者也可以被注入)
             # ex.: -> A提供者|(无栈) -> 查询A-arg -> 取得B提供者 -> 查询B_arg -> A判断器
             #               |(有栈, 发现自己被重复依赖, 报错, 否则等到无限递归报错)
@@ -79,12 +76,12 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
             #       当前这一层判断器不会继续留在 inspector_stack 中
             #       inspector_stack 只描述当前仍在进行的判断器调用路径
         ):
-        inspector_stack = ctx[MagicKey("inspector_stack")]
-        provider_stack  = ctx[ MagicKey("provider_stack")]
+        inspector_stack = ctx["__inspector_stack__"]
+        provider_stack  = ctx["__provider_stack__"]
 
         if provider := (
-            supplier.query_by_note(param.annotation)
-            or supplier.query_by_param(param.name)
+            supplier.query_by_param(param.name)
+            or supplier.query_by_note(param.annotation)
             or await supplier.match(ctx, inspector_stack, provider_stack)
         ):
             if provider in provider_stack:
