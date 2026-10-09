@@ -8,9 +8,7 @@ __all__ = [
     "RouteTypes",
     "make_response",
     "abort_code",
-    "FastTCPServer",
     "_Context",
-    "ClientFastTCP",
     "_Socket",
     "Context",
     "Socket"

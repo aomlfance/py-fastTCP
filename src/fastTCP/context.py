@@ -23,7 +23,7 @@ class Context(Protocol):
             KeyError: 当item既不在long, 也不在short时
         """
 
-    def __contains__(self, item: str) -> bool:
+    def __contains__(self, item: str) -> Any:
         """
         item是否在上下文中.
         """

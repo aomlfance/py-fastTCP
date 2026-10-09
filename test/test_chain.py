@@ -18,7 +18,7 @@ from src.fastTCP.response import default_response
 def _make_ctx(cmd="test", body=b""):
     """构造带 message + supplier 的 context"""
     supplier = Supplier.default()
-    ctx = _Context(__supplier__=supplier)
+    ctx = _Context.take_self(__supplier__=supplier)
     ctx.short["__message__"] = RequestMessage(cmd=cmd, body=body)
     return ctx
 
@@ -84,7 +84,7 @@ class TestRoutesManager:
         mgr.add_route(self._make_route("user.<int:id>", get_user))
 
         chain = mgr.get_chain("user.42")
-        assert chain.main_route.handler is get_user
+        assert chain.main_route.handler.__wrapped__ is get_user
 
     def test_dynamic_route_not_matching(self):
         mgr = RoutesManager()
@@ -107,7 +107,7 @@ class TestChain:
         chain = Chain([], route, [])
 
         ctx = _make_ctx()
-        res = await chain(ctx)
+        res = await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert res.body == msgpack.packb("ok")
 
     @pytest.mark.asyncio
@@ -126,7 +126,7 @@ class TestChain:
         chain = Chain([before_route], main_route, [])
 
         ctx = _make_ctx()
-        res = await chain(ctx)
+        res = await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert "main" not in called
         assert res.body == msgpack.packb("blocked")
 
@@ -143,7 +143,7 @@ class TestChain:
         chain = Chain([before_route], main_route, [])
 
         ctx = _make_ctx()
-        res = await chain(ctx)
+        res = await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert res.body == msgpack.packb("ok")
 
     @pytest.mark.asyncio
@@ -159,7 +159,7 @@ class TestChain:
         chain = Chain([], main_route, [after_route])
 
         ctx = _make_ctx()
-        res = await chain(ctx)
+        res = await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert res.body == msgpack.packb("overridden")
 
     @pytest.mark.asyncio
@@ -175,7 +175,7 @@ class TestChain:
         chain = Chain([], main_route, [after_route])
 
         ctx = _make_ctx()
-        res = await chain(ctx)
+        res = await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert res.body == msgpack.packb("original")
 
     @pytest.mark.asyncio
@@ -205,7 +205,7 @@ class TestChain:
 
         chain = Chain([b1, b2], main_r, [a1])
         ctx = _make_ctx()
-        await chain(ctx)
+        await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert order == ["before1", "before2", "main", "after"]
 
     @pytest.mark.asyncio
@@ -217,7 +217,7 @@ class TestChain:
         chain = Chain([], route, [], param={"id": "42"})
 
         ctx = _make_ctx("user.42")
-        await chain(ctx)
+        await chain(ctx, ctx["__supplier__"], ctx.short["__message__"])
         assert ctx.short.get("id") == "42"
 
 
@@ -225,7 +225,7 @@ class TestChain:
 
 def _make_ctx_with_socket(cmd="test", body=b""):
     supplier = Supplier.default()
-    ctx = _Context(__supplier__=supplier)
+    ctx = _Context.take_self(__supplier__=supplier)
     ctx.short["__message__"] = RequestMessage(cmd=cmd, body=body)
     return ctx
 
@@ -237,7 +237,7 @@ class TestRouteCall:
             return "hello"
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res.body == msgpack.packb("hello")
 
     @pytest.mark.asyncio
@@ -246,7 +246,7 @@ class TestRouteCall:
             return {"key": "val"}
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert msgpack.unpackb(res.body) == {"key": "val"}
 
     @pytest.mark.asyncio
@@ -255,7 +255,7 @@ class TestRouteCall:
             return "created", 201
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res.status_code == 201
 
     @pytest.mark.asyncio
@@ -264,7 +264,7 @@ class TestRouteCall:
             return {"a": 1}
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert msgpack.unpackb(res.body) == {"a": 1}
 
     @pytest.mark.asyncio
@@ -273,7 +273,7 @@ class TestRouteCall:
             return None
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res.status_code == 204
 
     @pytest.mark.asyncio
@@ -282,7 +282,7 @@ class TestRouteCall:
             return None
         route = Route("test", handler, RouteTypes.BEFORE_ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res is None
 
     @pytest.mark.asyncio
@@ -291,7 +291,7 @@ class TestRouteCall:
             raise Abort(default_response(403))
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res.status_code == 403
 
     @pytest.mark.asyncio
@@ -300,7 +300,7 @@ class TestRouteCall:
             raise ValueError("boom")
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res.status_code == 500
 
     @pytest.mark.asyncio
@@ -310,7 +310,7 @@ class TestRouteCall:
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
         with pytest.raises(ExitSignal):
-            await route(ctx)
+            await route(ctx, ctx["__supplier__"])
 
     @pytest.mark.asyncio
     async def test_pydantic_validation_error_gives_400(self):
@@ -320,8 +320,8 @@ class TestRouteCall:
         def handler(s: Strict):  # type: ignore
             return "ok"
         route = Route("test", handler, RouteTypes.ROUTE)
-        ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        ctx = _make_ctx_with_socket(body=msgpack.packb({"required_field": "not_int"}))
+        res = await route(ctx, ctx["__supplier__"])
         assert res.status_code == 400
 
     @pytest.mark.asyncio
@@ -330,7 +330,7 @@ class TestRouteCall:
             return "ok"
         route = Route("test", handler, RouteTypes.ROUTE)
         ctx = _make_ctx_with_socket()
-        res = await route(ctx)
+        res = await route(ctx, ctx["__supplier__"])
         assert res.status_code == 500
 
 
@@ -352,7 +352,7 @@ class TestBlueprint:
             return "hello"
 
         chain = mgr.get_chain("hello")
-        assert chain.main_route.handler is hello
+        assert chain.main_route.handler.__wrapped__ is hello
 
     def test_route_list_cmds(self):
         mgr = RoutesManager()
@@ -370,7 +370,7 @@ class TestBlueprint:
 
         for cmd in ["hey", "hi", "hello"]:
             chain = mgr.get_chain(cmd)
-            assert chain.main_route.handler is greet
+            assert chain.main_route.handler.__wrapped__ is greet
 
     def test_before_and_after_on_same_cmd(self):
         mgr = RoutesManager()

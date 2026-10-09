@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Protocol, Any, Callable
 from types import TracebackType
 
 if TYPE_CHECKING:
-    from provider import Supplier
-    from msg import RequestMessage
+    from .provider import Supplier
+    from .msg import RequestMessage
 
 import inspect
 from .context import _Context, Context
@@ -55,10 +55,6 @@ async def inject_one(param: inspect.Parameter, ctx: _Context, supplier: Supplier
     # --先查参数名--
     if param.name in ctx:
         return ctx[param.name]
-
-    # 关于take_self工厂, 它解决"取到哪个ctx实例"(not_close代理);
-    # 这里的特判解决的是"打断 provider 自递归":
-    # 否则 note_store[Context] -> _map(__context__) -> 注入 ctx: Context -> 又查到同一个 _map -> 循环依赖
 
     with NotCoveredLevel(
             ctx,
