@@ -1,25 +1,53 @@
-from typing import Any, Callable, TypeVar, Hashable
-from .context import _Context
+from typing import Any, Callable, TypeVar, Annotated
+
+import msgpack
+import pydantic
+from .context import _Context, Context
 from .socket_ import _Socket
 from .exceptions import ExitSignal
 from .handler import process_msg
 from .route import Blueprint
-from .provider import Supplier
 from .utils import _clear
+from .response import abort_code
 
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
-async def _main_loop(bp: Blueprint, ctx: _Context, socket: _Socket, supplier: Supplier):
+async def _main_loop(bp: Blueprint, ctx: _Context, socket: _Socket):
     try:
         while not socket.writer.is_closing():
-            await process_msg(bp, ctx, socket, logger, supplier)
+            await process_msg(bp, ctx, socket, logger)
     except (ExitSignal, ConnectionResetError, BrokenPipeError) as e:
         logger.info("服务器退出")
 
-_OF = TypeVar("_OF", bound=Callable)
+C = TypeVar("C")
+
+class Message:
+    def __class_getitem__(cls, item: type[C]):
+        def get_msg(ctx: Context) -> C:
+            if "__loaded__" not in ctx:
+                message = ctx["__message__"]
+                ctx.short["__loaded__"] = msgpack.unpackb(message.body)
+
+            loaded = ctx["__loaded__"]
+
+            if issubclass(item, pydantic.BaseModel):
+                try:
+                    loaded = item.model_validate(loaded)
+                except pydantic.ValidationError as e:
+                    logger.debug(f"pydantic ValidationError - 请求数据未通过校验: {e}")
+                    abort_code(400)
+                else:
+                    return loaded
+            
+            if not isinstance(loaded, item):
+                abort_code(400)
+
+            return loaded
+        
+        return Annotated[item, get_msg]
 
 class FastTCP(Blueprint):
     # 在这里需要理解socket的本质
@@ -31,40 +59,6 @@ class FastTCP(Blueprint):
         super().__init__()
 
         self.conns: dict[tuple, _Context] = {}
-        self.supplier = Supplier.default()
-
-    def provide_note(self, note: Hashable) -> Callable[[_OF], _OF]:
-        """
-        显式声明提供什么. 优先级高
-
-        Args:
-            note: 一个可hash对象(dict要求)
-
-        Returns:
-            返回一个装饰器(接受一个函数的函数),其形参函数(也可以被注入)的返回值会被当作注入的值.
-
-        Notes:
-            由于判断函数, 取值函数都可以被注入取得Context, 也可以达到惰性求值的效果
-        """
-        return self.supplier.provide_note(note)
-
-    def provide_param(self, param: str) -> Callable[[_OF], _OF]:
-        """
-        类provide_note. 优先级中
-
-        Args:
-            param: 要注入的同名参数名
-        """
-        return self.supplier.provide_param(param)
-
-    def judgment(self, judgment_thing: Callable) -> Callable[[_OF], _OF]:
-        """
-        隐式提供(优先最低, 不推荐使用), 由判断器决策是否调用提供者的值注入
-
-        Notes:
-            该方法可能不会公开, 因为太具有迷惑性.
-        """
-        return self.supplier.judgment(judgment_thing)
 
     @property
     def _unique_client(self) -> _Socket:
@@ -108,7 +102,7 @@ class FastTCP(Blueprint):
             socket: 关于为什么要显式传入_Context, 见_Context注释.
 
         """
-        await _main_loop(self, ctx, socket, self.supplier)
+        await _main_loop(self, ctx, socket)
         await self._uninstall_conn(socket)
 
     async def _handle_client(self, r: asyncio.StreamReader, w: asyncio.StreamWriter):
@@ -151,7 +145,7 @@ class FastTCP(Blueprint):
         """
         socket = _Socket(r, w, *args, **kwargs)
 
-        ctx = _Context.take_self()
+        ctx = _Context()
         ctx.long["__socket__"] = socket
 
         self.conns[socket.address] = ctx

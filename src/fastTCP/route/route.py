@@ -3,7 +3,6 @@ from typing import Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from ..context import _Context
     from ..response import ResponseMessage
-    from ..provider import Supplier
 
 from ..context import Context  # noqa: F401
 
@@ -15,7 +14,7 @@ from .match import is_match_cmd, to_pat
 from ..response import default_response, make_response
 from ..utils import TempSignature
 from ..injection import call_like_route
-from ..exceptions import ExitSignal
+from ..exceptions import Abort, ExitSignal
 import pydantic
 
 logger = logging.getLogger(__name__)
@@ -46,20 +45,18 @@ class Route:
 
         self.type = type_
 
-    async def __call__(self, ctx: _Context, supplier: Supplier) -> ResponseMessage | None:
+    async def __call__(self, ctx: _Context) -> ResponseMessage | None:
         """
         :return: 倘若route.type为RouteTypes.ROUTE必定返回ResponsePayload
         """
         result = None
 
         try:
-            result = await call_like_route(self.handler, ctx, supplier)
+            result = await call_like_route(self.handler, ctx)
+        except Abort as e:
+            result = e.response
         except ExitSignal:
             raise
-        except pydantic.ValidationError:
-            # pydantic 校验失败属于客户端数据错误 -> 400
-            logger.error("pydantic ValidationError - 请求数据未通过校验")
-            result = default_response(400)
         except Exception as e:
             logger.error(f"{type(e)} - {e}")
             result = default_response(500)

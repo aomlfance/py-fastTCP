@@ -23,7 +23,7 @@ class Context(Protocol):
             KeyError: 当item既不在long, 也不在short时
         """
 
-    def __contains__(self, item: str) -> Any:
+    def __contains__(self, item: str) -> object:
         """
         item是否在上下文中.
         """
@@ -74,26 +74,3 @@ class _Context:
             await _clear(self.long)
         finally:
             self.long.pop("__in_clearing__", None)
-
-    @classmethod
-    def take_self(cls, **kwargs):
-        obj = cls(**kwargs)
-
-        not_close_ctx = _NotCloseContext()
-
-        not_close_ctx.long = obj.long
-        not_close_ctx.short = obj.short
-
-        obj.long["__context__"] = not_close_ctx
-
-        return obj
-
-class _NotCloseContext(_Context):
-    def close(self):
-        if self.get("__in_clearing__"):
-            return
-        else:
-            raise RuntimeWarning("不得不在父上下文closing时关闭上下文")
-
-    async def aclose(self):
-        return self.close()

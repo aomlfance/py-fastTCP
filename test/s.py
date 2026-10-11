@@ -2,23 +2,10 @@ from fastTCP.unification_socket import FastTCP
 from asyncio import run
 
 app = FastTCP()
-app2 = FastTCP()
-
-def c(__load__):
-    print(__load__)
-    return __load__
 
 async def main():
     await app.connect('127.0.0.1', 8080)
-    await app2.connect("127.0.0.1", 8080)
 
-    app2.provide_param("b")(c)
-
-    @app2.route("msg")
-    def get_msg(b, msg: dict):
-        print(msg.get("sender"), msg.get("msg"))
-        return "ok"
-
-    res = await app.request("global", "FastTCP")
+    await app.request("/hello", "str")
 
 run(main())

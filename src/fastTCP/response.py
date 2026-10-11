@@ -11,7 +11,7 @@ import msgpack
 logger = logging.getLogger(__name__)
 
 def make_response(
-        res,
+        res: Any,
         default_status_code: int = 200,
 ) -> ResponseMessage:
     """

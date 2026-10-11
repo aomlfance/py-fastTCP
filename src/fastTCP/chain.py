@@ -5,10 +5,9 @@ if TYPE_CHECKING:
     from .route import Route
     from .context import _Context
     from .msg import ResponseMessage
-    from .provider import Supplier
     from .msg import RequestMessage
 
-from .context import Context  # noqa: F401 保留原导入位置
+from .context import Context  
 from .response import make_response, default_response
 
 class Chain:
@@ -24,23 +23,23 @@ class Chain:
         self.after = after
         self.param = param or {}
 
-    async def __call__(self, context: _Context, supplier: Supplier, message: RequestMessage) -> ResponseMessage:
+    async def __call__(self, context: _Context, message: RequestMessage) -> ResponseMessage:
         context.short.update(self.param)
 
         context.short["__message__"] = message
 
         for before_route in self.before:
-            res = await before_route(context, supplier)
+            res = await before_route(context)
 
             if res is not None: break
         else:
-            res = await self.main_route(context, supplier)
+            res = await self.main_route(context)
 
         res = make_response(res)
         last_res = res
 
         for after_route in self.after:
-            res = await after_route(context, supplier)
+            res = await after_route(context)
 
             if res is None:
                 res = last_res
